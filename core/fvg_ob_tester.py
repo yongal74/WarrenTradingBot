@@ -53,10 +53,26 @@ CRYPTO_TICKERS = {
     'XRP': ('리플',     'XRP-USD', '15m'),
 }
 
+# ── 4H 전용 유니버스 (백테스트 1위 타임프레임) ────────────────
+# 4H: 1h 데이터 다운로드 후 리샘플
+CRYPTO_4H_TICKERS = {
+    'ETH': ('이더리움', 'ETH-USD'),
+    'SOL': ('솔라나',   'SOL-USD'),
+    'XRP': ('리플',     'XRP-USD'),
+    'BTC': ('비트코인', 'BTC-USD'),
+}
+
+US_4H_TICKERS = {
+    'NVDA': ('엔비디아',  'NVDA'),
+    'TSLA': ('테슬라',    'TSLA'),
+    'AMD':  ('AMD',       'AMD'),
+}
+
 
 def _load(yf_ticker: str, interval: str = '15m') -> pd.DataFrame | None:
+    period = '60d' if interval in ('1h',) else '5d'
     try:
-        df = yf.download(yf_ticker, period='5d', interval=interval,
+        df = yf.download(yf_ticker, period=period, interval=interval,
                          auto_adjust=True, progress=False)
         if df is None or df.empty: return None
         if hasattr(df.columns, 'levels'): df.columns = df.columns.droplevel(1)
@@ -312,6 +328,34 @@ def scan_all() -> list:
                             'price': price, **sig})
         else:
             print(f"    {name}({code}) | 현재가={price:.2f} | 신호없음")
+
+    # ── 4H 스캔 (백테스트 1위 타임프레임) ──────────────────────
+    print("\n  [4H 스캔 — CRYPTO + US 핵심종목]")
+    for group_name, tickers_4h in [('CRYPTO', CRYPTO_4H_TICKERS), ('US', US_4H_TICKERS)]:
+        for code, (name, yf_tk) in tickers_4h.items():
+            # 1h 데이터 다운로드 후 4h 리샘플
+            df_1h = _load(yf_tk, '1h')
+            if df_1h is None or len(df_1h) < 30:
+                print(f"    {name}({code}) 4H: 데이터 없음")
+                continue
+            df = df_1h.resample('4h').agg({
+                'Open': 'first', 'High': 'max', 'Low': 'min',
+                'Close': 'last', 'Volume': 'sum'
+            }).dropna()
+            if len(df) < 30:
+                continue
+            price = float(df['Close'].iloc[-1])
+            sig = _check_signal_with_quality(df, min_q)
+            if sig:
+                fmt = '.2f' if group_name in ('US', 'CRYPTO') else ',.0f'
+                print(f"    *** {name}({code}) 4H | {sig['type']} 신호 | "
+                      f"현재가={price:{fmt}} | 진입={sig['entry']:{fmt}} | "
+                      f"TP=+{sig['tp_pct']:.2f}% | SL={sig['sl_pct']:.2f}%")
+                signals.append({'ticker': code, 'name': name,
+                                'market': group_name, 'timeframe': '4H',
+                                'price': price, **sig})
+            else:
+                print(f"    {name}({code}) 4H | 현재가={price:.2f} | 신호없음")
 
     print(f"\n  {'='*40}")
     print(f"  총 신호: {len(signals)}건")
