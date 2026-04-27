@@ -321,20 +321,20 @@ st.markdown(f"""
 
 # ── Page Routing ──────────────────────────────────────────────────
 if page == "Overview":
-    from dashboard.pages import _page_overview as _po; _po.render()
+    from dashboard._pages import _page_overview as _po; _po.render()
 elif page == "Live Trading":
-    from dashboard.pages import _page_live as _pl; _pl.render()
+    from dashboard._pages import _page_live as _pl; _pl.render()
 elif page == "FVG+OB Signals":
-    from dashboard.pages import _page_signals as _ps; _ps.render()
+    from dashboard._pages import _page_signals as _ps; _ps.render()
 elif page == "Market Brain":
-    from dashboard.pages import _page_brain as _pb; _pb.render()
+    from dashboard._pages import _page_brain as _pb; _pb.render()
 elif page == "Strategy Factory":
-    from dashboard.pages import _page_strategy as _pst; _pst.render()
+    from dashboard._pages import _page_strategy as _pst; _pst.render()
 elif page == "Asset Analysis":
-    from dashboard.pages import _page_analysis as _pa; _pa.render()
+    from dashboard._pages import _page_analysis as _pa; _pa.render()
 elif page == "Backtest Results":
-    from dashboard.pages import _page_backtest as _pbk; _pbk.render()
+    from dashboard._pages import _page_backtest as _pbk; _pbk.render()
 elif page == "Trade Log":
-    from dashboard.pages import _page_trades as _ptr; _ptr.render()
+    from dashboard._pages import _page_trades as _ptr; _ptr.render()
 elif page == "Settings":
-    from dashboard.pages import _page_settings as _pse; _pse.render()
+    from dashboard._pages import _page_settings as _pse; _pse.render()
