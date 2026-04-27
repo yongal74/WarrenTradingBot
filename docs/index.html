@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Warren Trading Bot — FVG+OB Auto Trader</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --green: #3fb950;
+    --blue: #58a6ff;
+    --yellow: #e3b341;
+    --red: #f85149;
+    --purple: #bc8cff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    line-height: 1.6;
+  }
+
+  /* NAV */
+  nav {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 60px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .nav-logo { font-size: 18px; font-weight: 700; color: var(--green); }
+  .nav-links { display: flex; gap: 24px; }
+  .nav-links a { color: var(--muted); text-decoration: none; font-size: 14px; transition: color .2s; }
+  .nav-links a:hover { color: var(--text); }
+  .nav-download {
+    background: var(--green);
+    color: #000;
+    padding: 8px 20px;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 14px;
+    text-decoration: none;
+    transition: background .2s;
+  }
+  .nav-download:hover { background: #2ea043; }
+
+  /* HERO */
+  .hero {
+    text-align: center;
+    padding: 100px 32px 80px;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  .hero-badge {
+    display: inline-block;
+    background: rgba(63,185,80,.15);
+    border: 1px solid rgba(63,185,80,.4);
+    color: var(--green);
+    padding: 4px 14px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 24px;
+  }
+  .hero h1 {
+    font-size: 56px;
+    font-weight: 800;
+    line-height: 1.1;
+    margin-bottom: 20px;
+    background: linear-gradient(135deg, #e6edf3, var(--green));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .hero p {
+    font-size: 20px;
+    color: var(--muted);
+    max-width: 600px;
+    margin: 0 auto 40px;
+  }
+  .hero-btns { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--green);
+    color: #000;
+    padding: 14px 32px;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 700;
+    text-decoration: none;
+    transition: background .2s, transform .15s;
+  }
+  .btn-primary:hover { background: #2ea043; transform: translateY(-2px); }
+  .btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: transparent;
+    color: var(--text);
+    padding: 14px 32px;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    text-decoration: none;
+    border: 1px solid var(--border);
+    transition: border-color .2s, transform .15s;
+  }
+  .btn-secondary:hover { border-color: var(--blue); transform: translateY(-2px); }
+
+  /* STATS */
+  .stats {
+    display: flex;
+    justify-content: center;
+    gap: 48px;
+    padding: 40px 32px;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .stat-item { text-align: center; }
+  .stat-val { font-size: 36px; font-weight: 800; color: var(--green); }
+  .stat-label { font-size: 14px; color: var(--muted); margin-top: 4px; }
+
+  /* FEATURES */
+  .section { max-width: 1100px; margin: 0 auto; padding: 80px 32px; }
+  .section-title {
+    font-size: 36px;
+    font-weight: 700;
+    text-align: center;
+    margin-bottom: 12px;
+  }
+  .section-sub {
+    text-align: center;
+    color: var(--muted);
+    font-size: 16px;
+    margin-bottom: 56px;
+  }
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+  }
+  .feature-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px;
+    transition: border-color .2s, transform .15s;
+  }
+  .feature-card:hover { border-color: var(--green); transform: translateY(-3px); }
+  .feature-icon { font-size: 32px; margin-bottom: 16px; }
+  .feature-card h3 { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+  .feature-card p { color: var(--muted); font-size: 14px; }
+
+  /* STRATEGIES */
+  .strategies-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 36px;
+  }
+  .strat-tabs { display: flex; gap: 8px; margin-bottom: 28px; flex-wrap: wrap; }
+  .strat-tab {
+    padding: 6px 16px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    border: 1px solid var(--border);
+    cursor: default;
+  }
+  .tab-c1 { color: var(--yellow); border-color: var(--yellow); background: rgba(227,179,65,.1); }
+  .tab-c2 { color: var(--green); border-color: var(--green); background: rgba(63,185,80,.1); }
+  .tab-c3 { color: var(--blue); border-color: var(--blue); background: rgba(88,166,255,.1); }
+  .tab-c4 { color: var(--red); border-color: var(--red); background: rgba(248,81,73,.1); }
+  .tab-c5 { color: var(--purple); border-color: var(--purple); background: rgba(188,140,255,.1); }
+  .strat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 10px;
+  }
+  .strat-pill {
+    background: rgba(255,255,255,.04);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 12px;
+  }
+  .strat-pill .sid { color: var(--muted); font-size: 11px; }
+  .strat-pill .sname { font-weight: 600; margin-top: 2px; }
+
+  /* BACKTEST RESULTS */
+  .results-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+  }
+  .result-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px;
+  }
+  .result-card .market-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 700;
+    margin-bottom: 16px;
+  }
+  .badge-kr { background: rgba(63,185,80,.15); color: var(--green); }
+  .badge-us { background: rgba(88,166,255,.15); color: var(--blue); }
+  .badge-crypto { background: rgba(227,179,65,.15); color: var(--yellow); }
+  .result-card .profit { font-size: 32px; font-weight: 800; color: var(--green); }
+  .result-card .profit-label { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  .result-stats { margin-top: 20px; display: flex; flex-direction: column; gap: 8px; }
+  .result-row { display: flex; justify-content: space-between; font-size: 14px; }
+  .result-row span:first-child { color: var(--muted); }
+  .result-row span:last-child { font-weight: 600; }
+
+  /* HOW IT WORKS */
+  .steps { display: flex; flex-direction: column; gap: 0; position: relative; }
+  .steps::before {
+    content: '';
+    position: absolute;
+    left: 27px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: linear-gradient(to bottom, var(--green), var(--border));
+  }
+  .step { display: flex; gap: 24px; padding: 0 0 40px 0; }
+  .step-num {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: var(--surface);
+    border: 2px solid var(--green);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--green);
+    flex-shrink: 0;
+    z-index: 1;
+  }
+  .step-content { padding-top: 12px; }
+  .step-content h3 { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+  .step-content p { color: var(--muted); font-size: 14px; }
+  .step-content code {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 13px;
+    color: var(--green);
+  }
+
+  /* DOWNLOAD */
+  .download-section {
+    background: linear-gradient(135deg, var(--surface), #1c2128);
+    border-top: 1px solid var(--border);
+    padding: 80px 32px;
+    text-align: center;
+  }
+  .download-box {
+    max-width: 600px;
+    margin: 0 auto;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 40px;
+  }
+  .download-box h2 { font-size: 28px; font-weight: 700; margin-bottom: 12px; }
+  .download-box p { color: var(--muted); margin-bottom: 32px; }
+  .download-btns { display: flex; flex-direction: column; gap: 12px; }
+  .dl-btn {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    text-decoration: none;
+    color: var(--text);
+    transition: border-color .2s;
+  }
+  .dl-btn:hover { border-color: var(--green); }
+  .dl-btn-left { display: flex; align-items: center; gap: 12px; font-weight: 600; }
+  .dl-btn-icon { font-size: 24px; }
+  .dl-btn-meta { font-size: 12px; color: var(--muted); }
+  .dl-btn-arrow { color: var(--green); font-size: 18px; }
+
+  /* FOOTER */
+  footer {
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 40px 32px;
+    text-align: center;
+  }
+  footer p { color: var(--muted); font-size: 13px; }
+  footer a { color: var(--blue); text-decoration: none; }
+
+  /* RESPONSIVE */
+  @media (max-width: 640px) {
+    .hero h1 { font-size: 36px; }
+    .stats { gap: 28px; }
+    .nav-links { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">Warren Bot</div>
+  <div class="nav-links">
+    <a href="#features">기능</a>
+    <a href="#strategies">전략</a>
+    <a href="#results">백테스트</a>
+    <a href="#install">설치</a>
+    <a href="https://github.com/yongal74/WarrenTradingBot" target="_blank">GitHub</a>
+  </div>
+  <a href="#download" class="nav-download">무료 다운로드</a>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-badge">v2.0 — FVG+OB Auto Trader</div>
+  <h1>Warren<br>Trading Bot</h1>
+  <p>한국주식 · 미국주식 · 암호화폐<br>25개 전략 + C1~C5 합류점 자동매매</p>
+  <div class="hero-btns">
+    <a href="#download" class="btn-primary">
+      &#8595; Windows 다운로드
+    </a>
+    <a href="https://github.com/yongal74/WarrenTradingBot" class="btn-secondary" target="_blank">
+      GitHub 소스코드
+    </a>
+  </div>
+</div>
+
+<!-- STATS -->
+<div class="stats">
+  <div class="stat-item">
+    <div class="stat-val">25+</div>
+    <div class="stat-label">트레이딩 전략</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-val">5</div>
+    <div class="stat-label">합류점 모델 (C1~C5)</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-val">3</div>
+    <div class="stat-label">지원 시장 (KR/US/CRYPTO)</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-val">1:2</div>
+    <div class="stat-label">고정 R:R 비율</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-val">15분</div>
+    <div class="stat-label">타임프레임</div>
+  </div>
+</div>
+
+<!-- FEATURES -->
+<div class="section" id="features">
+  <div class="section-title">주요 기능</div>
+  <div class="section-sub">FVG+OB ICT 전략부터 25개 전략 합류점까지 — 완전 자동화</div>
+  <div class="features-grid">
+    <div class="feature-card">
+      <div class="feature-icon">&#9889;</div>
+      <h3>FVG+OB 핵심 전략</h3>
+      <p>Fair Value Gap과 Order Block 되돌림 진입. ICT 방법론 기반 15분봉 자동 스캔.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">&#128200;</div>
+      <h3>25개 전략 엔진</h3>
+      <p>EMA 크로스, SuperTrend, MACD, RSI, Bollinger Band, Ichimoku, CHoCH 등 전략 자동 신호 생성.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">&#127775;</div>
+      <h3>C1~C5 합류점</h3>
+      <p>5개 합류점 모델로 전략 신호를 결합해 고확률 진입 타이밍 포착.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">&#127760;</div>
+      <h3>3개 시장 동시 운용</h3>
+      <p>한국주식(KIS), 미국주식, 업비트 암호화폐를 하나의 대시보드에서 관리.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">&#128196;</div>
+      <h3>Streamlit 대시보드</h3>
+      <p>Overview, 신호 스캐너, Strategy Factory, 백테스트, 트레이드 로그 등 8개 페이지.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">&#128276;</div>
+      <h3>TradingView 웹훅</h3>
+      <p>TradingView 알림 → FastAPI 웹훅 → 자동 주문 파이프라인.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">&#128197;</div>
+      <h3>일일 자동 스캔</h3>
+      <p>Windows Task Scheduler로 KR(09:00) / US(22:30) 매일 자동 포워드 스캔.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">&#128737;</div>
+      <h3>리스크 관리</h3>
+      <p>트레이드당 최대 1% 리스크, SL/TP 자동 설정, 일일 손실 한도 초과 시 자동 중단.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">&#128640;</div>
+      <h3>원클릭 실행</h3>
+      <p>WARREN_START.bat 더블클릭 한 번으로 대시보드 + 웹훅 + 스캐너 동시 시작.</p>
+    </div>
+  </div>
+</div>
+
+<!-- STRATEGIES -->
+<div class="section" id="strategies">
+  <div class="section-title">25개 전략 + C1~C5 합류점</div>
+  <div class="section-sub">모든 전략 신호가 실시간으로 계산되어 대시보드에 표시됩니다</div>
+  <div class="strategies-wrap">
+    <div class="strat-tabs">
+      <div class="strat-tab tab-c1">C1 DBB SmartMoney</div>
+      <div class="strat-tab tab-c2">C2 Multi-Trend</div>
+      <div class="strat-tab tab-c3">C3 Breakout</div>
+      <div class="strat-tab tab-c4">C4 Mean Reversion</div>
+      <div class="strat-tab tab-c5">C5 Pattern Structure</div>
+    </div>
+    <div class="strat-grid">
+      <div class="strat-pill"><div class="sid">S01</div><div class="sname">EMA 9/21 크로스</div></div>
+      <div class="strat-pill"><div class="sid">S02</div><div class="sname">EMA 20/50 크로스</div></div>
+      <div class="strat-pill"><div class="sid">S03</div><div class="sname">골든/데드크로스</div></div>
+      <div class="strat-pill"><div class="sid">S04</div><div class="sname">SuperTrend</div></div>
+      <div class="strat-pill"><div class="sid">S05</div><div class="sname">Hull MA 크로스</div></div>
+      <div class="strat-pill"><div class="sid">S06</div><div class="sname">일목균형표</div></div>
+      <div class="strat-pill"><div class="sid">S07</div><div class="sname">RSI>50 추세</div></div>
+      <div class="strat-pill"><div class="sid">S08</div><div class="sname">RSI 평균회귀</div></div>
+      <div class="strat-pill"><div class="sid">S09</div><div class="sname">MACD 시그널</div></div>
+      <div class="strat-pill"><div class="sid">S10</div><div class="sname">MACD 히스토그램</div></div>
+      <div class="strat-pill"><div class="sid">S11</div><div class="sname">BB 상단 돌파</div></div>
+      <div class="strat-pill"><div class="sid">S12</div><div class="sname">BB 평균회귀</div></div>
+      <div class="strat-pill"><div class="sid">S13</div><div class="sname">ATR 변동성 돌파</div></div>
+      <div class="strat-pill"><div class="sid">S14</div><div class="sname">Donchian 채널</div></div>
+      <div class="strat-pill"><div class="sid">S15</div><div class="sname">Z-Score 회귀</div></div>
+      <div class="strat-pill"><div class="sid">S16</div><div class="sname">SMA50 이탈 회귀</div></div>
+      <div class="strat-pill"><div class="sid">S17</div><div class="sname">FVG (ICT)</div></div>
+      <div class="strat-pill"><div class="sid">S18</div><div class="sname">Market Structure Break</div></div>
+      <div class="strat-pill"><div class="sid">S19</div><div class="sname">월요일 레인지</div></div>
+      <div class="strat-pill"><div class="sid">S20</div><div class="sname">Inside Bar 돌파</div></div>
+      <div class="strat-pill"><div class="sid">S21</div><div class="sname">불리시 엔글핑</div></div>
+      <div class="strat-pill"><div class="sid">S22</div><div class="sname">거래량 돌파</div></div>
+      <div class="strat-pill"><div class="sid">S23</div><div class="sname">EMA 리본 정배열</div></div>
+      <div class="strat-pill"><div class="sid">S24</div><div class="sname">CHoCH 추세전환</div></div>
+      <div class="strat-pill"><div class="sid">S25</div><div class="sname">핀바 망치형</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- BACKTEST RESULTS -->
+<div class="section" id="results">
+  <div class="section-title">백테스트 결과</div>
+  <div class="section-sub">yfinance 15분봉 60일 데이터 기준 — FVG+OB 전략</div>
+  <div class="results-grid">
+    <div class="result-card">
+      <div class="market-badge badge-kr">한국주식 KR</div>
+      <div class="profit">+267만원</div>
+      <div class="profit-label">1,000만원 시드 · 월 환산</div>
+      <div class="result-stats">
+        <div class="result-row"><span>대표 종목</span><span>삼성전자, SK하이닉스</span></div>
+        <div class="result-row"><span>평균 승률</span><span style="color: var(--green)">~56%</span></div>
+        <div class="result-row"><span>R:R</span><span>1 : 2</span></div>
+        <div class="result-row"><span>타임프레임</span><span>15분봉</span></div>
+      </div>
+    </div>
+    <div class="result-card">
+      <div class="market-badge badge-us">미국주식 US</div>
+      <div class="profit">+187만원</div>
+      <div class="profit-label">1,000만원 시드 · 월 환산</div>
+      <div class="result-stats">
+        <div class="result-row"><span>대표 종목</span><span>NVDA, TSLA, AAPL</span></div>
+        <div class="result-row"><span>평균 승률</span><span style="color: var(--green)">~52%</span></div>
+        <div class="result-row"><span>R:R</span><span>1 : 2</span></div>
+        <div class="result-row"><span>타임프레임</span><span>15분봉</span></div>
+      </div>
+    </div>
+    <div class="result-card">
+      <div class="market-badge badge-crypto">암호화폐 CRYPTO</div>
+      <div class="profit">+203만원</div>
+      <div class="profit-label">1,000만원 시드 · 월 환산</div>
+      <div class="result-stats">
+        <div class="result-row"><span>대표 종목</span><span>ETH, SOL, BNB</span></div>
+        <div class="result-row"><span>평균 승률</span><span style="color: var(--green)">~51%</span></div>
+        <div class="result-row"><span>R:R</span><span>1 : 2</span></div>
+        <div class="result-row"><span>24시간 거래</span><span style="color: var(--yellow)">거래수 2.6x</span></div>
+      </div>
+    </div>
+  </div>
+  <p style="text-align:center; color: var(--muted); font-size: 12px; margin-top: 20px;">
+    * 백테스트 결과는 과거 성과이며 미래 수익을 보장하지 않습니다. 항상 모의투자(Paper Trading)로 먼저 검증하세요.
+  </p>
+</div>
+
+<!-- HOW TO INSTALL -->
+<div class="section" id="install" style="padding-bottom: 0;">
+  <div class="section-title">설치 방법</div>
+  <div class="section-sub">Python 환경에서 4단계로 바로 실행</div>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-content">
+        <h3>다운로드 & 압축 해제</h3>
+        <p>아래 다운로드 버튼에서 ZIP 파일을 받아 원하는 폴더에 압축 해제합니다.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-content">
+        <h3>패키지 자동 설치</h3>
+        <p><code>install.bat</code>을 더블클릭하면 필요한 Python 패키지가 자동으로 설치됩니다.<br>
+        (Python 3.9+ 필요 — <a href="https://python.org" style="color: var(--blue)">python.org</a>에서 설치)</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-content">
+        <h3>API 키 설정</h3>
+        <p><code>.env.example</code>을 <code>.env</code>로 복사하고 KIS / 업비트 API 키를 입력합니다.<br>
+        KIS 모의투자: <a href="https://apiportal.koreainvestment.com" style="color: var(--blue)">apiportal.koreainvestment.com</a></p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-content">
+        <h3>실행!</h3>
+        <p><code>WARREN_START.bat</code>을 더블클릭하면 대시보드가 자동으로 브라우저에서 열립니다.<br>
+        (<a href="http://localhost:8501" style="color: var(--blue)">http://localhost:8501</a>)</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- DOWNLOAD -->
+<div class="download-section" id="download">
+  <div class="download-box">
+    <h2>Warren Trading Bot 다운로드</h2>
+    <p>무료 오픈소스 · Windows 10/11 · Python 3.9+ 필요</p>
+    <div class="download-btns">
+      <a href="https://github.com/yongal74/WarrenTradingBot/archive/refs/heads/master.zip" class="dl-btn">
+        <div class="dl-btn-left">
+          <div class="dl-btn-icon">&#128190;</div>
+          <div>
+            <div>ZIP 다운로드 (전체 소스)</div>
+            <div class="dl-btn-meta">WarrenTradingBot-master.zip</div>
+          </div>
+        </div>
+        <div class="dl-btn-arrow">&#8594;</div>
+      </a>
+      <a href="https://github.com/yongal74/WarrenTradingBot" class="dl-btn" target="_blank">
+        <div class="dl-btn-left">
+          <div class="dl-btn-icon">&#128025;</div>
+          <div>
+            <div>GitHub 리포지토리</div>
+            <div class="dl-btn-meta">yongal74/WarrenTradingBot</div>
+          </div>
+        </div>
+        <div class="dl-btn-arrow">&#8594;</div>
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <p>Warren Trading Bot &copy; 2025 &nbsp;|&nbsp;
+    <a href="https://github.com/yongal74/WarrenTradingBot">GitHub</a> &nbsp;|&nbsp;
+    오픈소스 · MIT 라이선스
+  </p>
+  <p style="margin-top: 8px;">투자는 본인 책임. 모의투자로 먼저 검증하세요.</p>
+</footer>
+
+</body>
+</html>
