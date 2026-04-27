@@ -21,6 +21,11 @@ from datetime import datetime, timedelta
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+# Windows 콘솔 UTF-8 강제 설정
+if sys.platform == 'win32':
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
 # .env 로드
 try:
     from dotenv import load_dotenv

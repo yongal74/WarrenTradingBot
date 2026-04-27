@@ -8,10 +8,16 @@ VIX / DXY / US10Y / 원달러 / 유가 → HALT / DEFENSIVE / NORMAL / AGGRESSIV
     regime, data = get_regime()
 """
 import warnings; warnings.filterwarnings('ignore')
+import sys
 import yfinance as yf
 import pandas as pd
 from datetime import datetime
 from pathlib import Path
+
+# Windows 콘솔 UTF-8
+if sys.platform == 'win32':
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 
 # ── 임계값 ────────────────────────────────────────────────
 VIX_HALT        = 35.0   # VIX > 35  → 전면 차단

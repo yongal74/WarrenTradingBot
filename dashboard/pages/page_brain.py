@@ -1,125 +1,254 @@
 # -*- coding: utf-8 -*-
-"""Market Brain 페이지 — 시장 국면 감지 (Bull/Bear/Neutral)"""
+"""
+Market Brain 페이지 — 5-Pillar 매크로 국면 대시보드
+Pillar1: VIX / DXY / US10Y / KRW / Oil → HALT/DEFENSIVE/NORMAL/AGGRESSIVE
+"""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import streamlit as st
 import pandas as pd
-import numpy as np
 import plotly.graph_objects as go
-from data.data_loader import load
+from datetime import datetime
 
-REGIME_ASSETS = ['SPY','QQQ']
 
-def detect_regime(df: pd.DataFrame) -> dict:
-    """시장 국면 감지"""
-    c  = df['Close']
-    r  = c.pct_change()
-    ma20  = c.rolling(20).mean().iloc[-1]
-    ma50  = c.rolling(50).mean().iloc[-1]
-    ma200 = c.rolling(200).mean().iloc[-1]
-    vol20 = r.rolling(20).std().iloc[-1] * np.sqrt(252) * 100
-    vol_avg = r.rolling(60).std().iloc[-1] * np.sqrt(252) * 100
-    rsi14 = _rsi(c).iloc[-1]
-    cur   = c.iloc[-1]
+# ── Pillar 1 색상 / 설명 매핑 ─────────────────────────────────────
+_REGIME_META = {
+    'HALT':       {'color': '#f85149', 'bg': 'rgba(248,81,73,.12)',  'label': '전면 차단',   'desc': 'VIX 35+ 위기 수준 — 오늘 거래 없음'},
+    'DEFENSIVE':  {'color': '#e3b341', 'bg': 'rgba(227,179,65,.12)', 'label': '방어 모드',   'desc': 'VIX 25+ / 거시 위험 — FVG+OB+품질필터(3점+)'},
+    'NORMAL':     {'color': '#58a6ff', 'bg': 'rgba(88,166,255,.10)', 'label': '일반 매매',   'desc': '거시 안정 — 순수 FVG+OB (최고 성과 모드)'},
+    'AGGRESSIVE': {'color': '#3fb950', 'bg': 'rgba(63,185,80,.12)',  'label': '적극 매수',   'desc': 'VIX 20 미만 / 모든 지표 긍정 — 적극 진입'},
+}
 
-    score = 0
-    score += 1 if cur > ma20  else -1
-    score += 1 if cur > ma50  else -1
-    score += 1 if cur > ma200 else -1
-    score += 1 if ma20 > ma50 else -1
-    score += 1 if rsi14 > 50  else -1
+_PILLAR_INFO = [
+    ('Pillar 1', '거시 국면',      'VIX / DXY / US10Y / KRW / Oil 5개 지표로 거래 가능 여부 결정'),
+    ('Pillar 2', '종목 스크리닝',  'KR5 + US5 + CRYPTO4 — 15종목 고정 유니버스'),
+    ('Pillar 3', 'FVG + OB 진입', 'Fair Value Gap & Order Block 되돌림 진입 (핵심 전략)'),
+    ('Pillar 4', '품질 필터',      'DEFENSIVE 국면에서만 활성 — 7점 중 3점 이상 (RSI/Volume/EMA/VWAP 등)'),
+    ('Pillar 5', '게이트키퍼',     'R:R 1:2 고정 / 일 3회 손절시 차단 / 15:55 강제 청산'),
+]
 
-    if   score >= 3: regime = 'BULL';    color='#3fb950'; emoji='🐂'
-    elif score <= -3: regime = 'BEAR';   color='#f85149'; emoji='🐻'
-    else:             regime = 'NEUTRAL';color='#e3b341'; emoji='⚖️'
 
-    return {
-        'regime': regime, 'color': color, 'emoji': emoji,
-        'score':  score, 'rsi': rsi14,
-        'ma20': ma20, 'ma50': ma50, 'ma200': ma200,
-        'vol20': vol20, 'vol_avg': vol_avg,
-        'current': cur,
-    }
+def _indicator_card(label: str, value, unit: str = '',
+                    warn: bool = False, danger: bool = False) -> str:
+    if danger:
+        vc, bc = '#f85149', 'rgba(248,81,73,.1)'
+    elif warn:
+        vc, bc = '#e3b341', 'rgba(227,179,65,.1)'
+    else:
+        vc, bc = '#3fb950', 'rgba(63,185,80,.08)'
 
-def _rsi(s, n=14):
-    d=s.diff(); g=d.clip(lower=0).ewm(com=n-1,min_periods=n).mean()
-    l=(-d).clip(lower=0).ewm(com=n-1,min_periods=n).mean()
-    return 100-100/(1+g/l.replace(0,np.nan))
+    val_str = f"{value:.1f}{unit}" if isinstance(value, float) else str(value)
+    return f"""
+    <div style='background:{bc};border:1px solid {vc}33;border-radius:6px;
+    padding:10px 14px;text-align:center;'>
+    <div style='font-size:18px;font-weight:700;color:{vc};'>{val_str}</div>
+    <div style='font-size:10px;color:#787b86;margin-top:3px;'>{label}</div>
+    </div>"""
+
 
 def render():
-    st.markdown("## 🧠 Market Brain — 시장 국면 감지")
-    st.markdown("SPY·QQQ 데이터 기반으로 현재 시장이 Bull/Bear/Neutral 중 어디에 있는지 판단합니다.")
+    st.markdown("## Market Brain — 5-Pillar 매크로 국면")
 
-    col1, col2 = st.columns(2)
+    # ── Pillar 1: 매크로 데이터 로드 ──────────────────────────────
+    with st.spinner("매크로 지표 조회 중..."):
+        try:
+            from core.macro_regime import get_regime, min_quality_by_regime
+            regime, data = get_regime()
+        except Exception as e:
+            st.error(f"매크로 데이터 로드 실패: {e}")
+            regime, data = 'NORMAL', {}
 
-    for ticker, col in zip(REGIME_ASSETS, [col1, col2]):
-        df = load(ticker, 'US')
-        if df is None or len(df) < 60:
-            with col:
-                st.warning(f"{ticker} 데이터 로드 실패")
-            continue
+    meta  = _REGIME_META.get(regime, _REGIME_META['NORMAL'])
+    min_q = min_quality_by_regime(regime)
 
-        r = detect_regime(df)
-        c = df['Close']
-        ma20  = c.rolling(20).mean()
-        ma50  = c.rolling(50).mean()
-        ma200 = c.rolling(200).mean()
-        recent = df.tail(120)
+    # ── 국면 배너 ─────────────────────────────────────────────────
+    score   = data.get('score', 0)
+    reasons = data.get('reasons', [])
+    updated = data.get('updated_at', datetime.now().strftime('%Y-%m-%d %H:%M'))
 
-        with col:
-            st.markdown(f"""
-            <div style='background:#1c2128;border:1px solid {r["color"]};border-radius:12px;
-            padding:16px;text-align:center;margin-bottom:16px;'>
-            <div style='font-size:48px;'>{r["emoji"]}</div>
-            <div style='font-size:28px;font-weight:700;color:{r["color"]};'>{r["regime"]}</div>
-            <div style='color:#8b949e;font-size:13px;'>{ticker} | 스코어: {r["score"]}/5</div>
-            </div>
-            """, unsafe_allow_html=True)
+    st.markdown(f"""
+    <div style='background:{meta["bg"]};border:2px solid {meta["color"]};
+    border-radius:10px;padding:16px 24px;margin-bottom:16px;
+    display:flex;align-items:center;gap:24px;'>
+      <div>
+        <div style='font-size:28px;font-weight:800;color:{meta["color"]};
+        letter-spacing:1px;'>{regime}</div>
+        <div style='font-size:12px;color:#d1d4dc;margin-top:4px;'>{meta["label"]} — {meta["desc"]}</div>
+        <div style='font-size:11px;color:#787b86;margin-top:4px;'>
+          위험 점수: <b style='color:{meta["color"]};'>{score}점</b> &nbsp;|&nbsp;
+          품질필터: <b style='color:{meta["color"]};'>{min_q}점 이상</b> &nbsp;|&nbsp;
+          갱신: {updated}
+        </div>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-            # 지표 표
-            metrics = {
-                'RSI(14)':      f"{r['rsi']:.1f}",
-                '현재가':        f"{r['current']:.2f}",
-                'MA20':         f"{r['ma20']:.2f}",
-                'MA50':         f"{r['ma50']:.2f}",
-                'MA200':        f"{r['ma200']:.2f}",
-                '변동성(연)':   f"{r['vol20']:.1f}%",
-            }
-            df_m = pd.DataFrame({'지표': list(metrics.keys()), '값': list(metrics.values())})
-            st.dataframe(df_m, width='stretch', hide_index=True)
+    # ── 위험 사유 (있을 때만) ──────────────────────────────────────
+    if reasons:
+        reason_html = " &nbsp;·&nbsp; ".join(
+            f"<span style='color:#e3b341;'>⚠ {r}</span>" for r in reasons
+        )
+        st.markdown(f"<div style='font-size:11px;padding:6px 0;'>{reason_html}</div>",
+                    unsafe_allow_html=True)
 
-            # 차트
-            fig = go.Figure()
-            fig.add_trace(go.Candlestick(
-                x=recent.index, open=recent['Open'], high=recent['High'],
-                low=recent['Low'], close=recent['Close'], name=ticker,
-                increasing_line_color='#3fb950', decreasing_line_color='#f85149',
-            ))
-            fig.add_trace(go.Scatter(x=recent.index, y=ma20.reindex(recent.index),
-                line=dict(color='#e3b341',width=1.5), name='MA20'))
-            fig.add_trace(go.Scatter(x=recent.index, y=ma50.reindex(recent.index),
-                line=dict(color='#58a6ff',width=1.5), name='MA50'))
-            fig.add_trace(go.Scatter(x=recent.index, y=ma200.reindex(recent.index),
-                line=dict(color='#ff7b72',width=1.5), name='MA200'))
-            fig.update_layout(
-                height=300, paper_bgcolor='rgba(0,0,0,0)',
-                plot_bgcolor='rgba(13,17,23,0.8)',
-                font_color='#e6edf3', showlegend=True,
-                margin=dict(t=10,b=30,l=40,r=10),
-                xaxis=dict(gridcolor='#21262d',color='#8b949e',rangeslider=dict(visible=False)),
-                yaxis=dict(gridcolor='#21262d',color='#8b949e'),
-                legend=dict(font=dict(color='#8b949e'),bgcolor='rgba(0,0,0,0)'),
-            )
-            st.plotly_chart(fig, width='stretch')
-
-    # 시장 국면 전략 추천
     st.markdown("---")
-    st.markdown("#### 💡 국면별 전략 추천")
-    df_rec = pd.DataFrame([
-        {'국면':'🐂 BULL','추천전략':'S01_EMA9_21, S02_EMA20_50, S23_EMA_Ribbon','설명':'추세 추종이 유리한 강세장'},
-        {'국면':'🐻 BEAR','추천전략':'S12_BB_Rev, S15_ZScore, S08_RSI_Rev','설명':'평균회귀 전략으로 반등 포착'},
-        {'국면':'⚖️ NEUTRAL','추천전략':'S07_RSI_Trend, S09_MACD, S19_Monday','설명':'범위 매매와 모멘텀 혼용'},
-    ])
-    st.dataframe(df_rec, width='stretch', hide_index=True)
+
+    # ── 거시 지표 카드 ────────────────────────────────────────────
+    st.markdown("<div class='sec-hdr'>MACRO INDICATORS (Pillar 1)</div>",
+                unsafe_allow_html=True)
+
+    vix   = data.get('vix')
+    dxy   = data.get('dxy')
+    dxy5  = data.get('dxy_5d_chg', 0.0)
+    t10y  = data.get('t10y')
+    krw   = data.get('krw')
+    oil   = data.get('oil')
+
+    c1, c2, c3, c4, c5 = st.columns(5)
+    with c1:
+        if vix is not None:
+            st.markdown(_indicator_card('VIX (공포지수)', vix,
+                danger=(vix > 35), warn=(vix > 25)), unsafe_allow_html=True)
+        else:
+            st.markdown(_indicator_card('VIX', 'N/A'), unsafe_allow_html=True)
+
+    with c2:
+        if dxy is not None:
+            st.markdown(_indicator_card(f'DXY (5일 {dxy5:+.1f}%)', dxy,
+                danger=(dxy5 > 1.5), warn=(dxy5 > 0.8)), unsafe_allow_html=True)
+        else:
+            st.markdown(_indicator_card('DXY', 'N/A'), unsafe_allow_html=True)
+
+    with c3:
+        if t10y is not None:
+            st.markdown(_indicator_card('US10Y (%)', t10y, unit='%',
+                danger=(t10y > 4.8), warn=(t10y > 4.2)), unsafe_allow_html=True)
+        else:
+            st.markdown(_indicator_card('US10Y', 'N/A'), unsafe_allow_html=True)
+
+    with c4:
+        if krw is not None:
+            st.markdown(_indicator_card('KRW/USD', krw, unit='',
+                danger=(krw > 1450), warn=(krw > 1400)), unsafe_allow_html=True)
+        else:
+            st.markdown(_indicator_card('KRW/USD', 'N/A'), unsafe_allow_html=True)
+
+    with c5:
+        if oil is not None:
+            st.markdown(_indicator_card('WTI Oil', oil, unit='$',
+                warn=(oil > 90)), unsafe_allow_html=True)
+        else:
+            st.markdown(_indicator_card('WTI Oil', 'N/A'), unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # ── 5-Pillar 상태 테이블 ──────────────────────────────────────
+    st.markdown("<div class='sec-hdr'>5-PILLAR SYSTEM STATUS</div>",
+                unsafe_allow_html=True)
+
+    pillar_rows = []
+    for name, title, desc in _PILLAR_INFO:
+        if name == 'Pillar 1':
+            status = '🟥 HALT' if regime == 'HALT' else \
+                     ('🟡 DEFENSIVE' if regime == 'DEFENSIVE' else
+                      ('🟢 NORMAL' if regime == 'NORMAL' else '🔵 AGGRESSIVE'))
+            detail = f"점수={score} | {', '.join(reasons) if reasons else '이상 없음'}"
+        elif name == 'Pillar 2':
+            status = '🟢 ACTIVE'
+            detail = 'KR5 (005930/000660/009150/034020/008060) + US5 + CRYPTO4'
+        elif name == 'Pillar 3':
+            status = '🟥 BLOCKED' if regime == 'HALT' else '🟢 ACTIVE'
+            detail = 'FVG+OB 15분봉 | R:R=1:2 | ZONE_EXPIRE=20봉'
+        elif name == 'Pillar 4':
+            if regime == 'HALT':
+                status = '🟥 BLOCKED'
+                detail = '거래 차단됨'
+            elif regime == 'DEFENSIVE':
+                status = '🟡 ON (3점+)'
+                detail = 'RSI<65 / Vol_OK / EMA정배열 / Fresh_Zone / PinBar / VWAP / SwingLow'
+            else:
+                status = '⚪ OFF'
+                detail = f'NORMAL/AGGRESSIVE → 필터 없음 (백테스트 최고 성과: +31.76%)'
+        else:  # Pillar 5
+            status = '🟢 ACTIVE'
+            detail = '일 3손절 차단 / 주간 -10% 시 중단 / 15:55 KR 강제청산'
+
+        pillar_rows.append({
+            'Pillar': name,
+            '기능': title,
+            '상태': status,
+            '상세': detail,
+        })
+
+    df_pillars = pd.DataFrame(pillar_rows)
+    st.dataframe(df_pillars, use_container_width=True, hide_index=True)
+
+    st.markdown("---")
+
+    # ── 실시간 FVG+OB 신호 (최근 스캔 결과) ──────────────────────
+    st.markdown("<div class='sec-hdr'>LATEST FVG+OB SIGNALS (Pillar 3)</div>",
+                unsafe_allow_html=True)
+
+    if regime == 'HALT':
+        st.error("HALT 모드 — 오늘 거래 없음 (VIX 위기 수준)")
+    else:
+        sig_log = Path(__file__).parent.parent.parent / 'logs' / 'forward_signals.csv'
+        if sig_log.exists():
+            try:
+                df_sig = pd.read_csv(sig_log, encoding='utf-8-sig')
+                if not df_sig.empty:
+                    # 최근 24h
+                    df_sig['dt'] = pd.to_datetime(df_sig['datetime'], errors='coerce')
+                    cutoff = pd.Timestamp.now() - pd.Timedelta(hours=24)
+                    df_recent = df_sig[df_sig['dt'] >= cutoff].copy()
+
+                    if df_recent.empty:
+                        st.info("최근 24시간 신호 없음 — 마지막 스캔 결과 표시")
+                        df_recent = df_sig.tail(15).copy()
+
+                    # 표시 컬럼 선택
+                    show_cols = ['datetime', 'name', 'market', 'type',
+                                 'price', 'entry', 'tp_pct', 'sl_pct']
+                    available = [c for c in show_cols if c in df_recent.columns]
+                    df_show = df_recent[available].sort_values('datetime', ascending=False).head(20)
+                    df_show.columns = [c.replace('_pct', '(%)') for c in df_show.columns]
+                    st.dataframe(df_show, use_container_width=True, hide_index=True)
+                    st.caption(f"총 누적 신호: {len(df_sig)}건 | 마지막 스캔: {df_sig['datetime'].iloc[-1]}")
+                else:
+                    st.info("신호 로그 비어있음")
+            except Exception as e:
+                st.warning(f"신호 로그 로드 실패: {e}")
+        else:
+            st.info("신호 로그 없음 — run_forward_daily.py 실행 후 표시됩니다")
+
+    st.markdown("---")
+
+    # ── 국면별 전략 가이드 ────────────────────────────────────────
+    st.markdown("<div class='sec-hdr'>REGIME STRATEGY GUIDE</div>",
+                unsafe_allow_html=True)
+
+    guide_rows = [
+        {'국면': 'HALT',       '진입': '없음',          '필터': '전면 차단',      '목표 R:R': '-',   '비고': 'VIX 35+ 위기 수준'},
+        {'국면': 'DEFENSIVE',  '진입': 'FVG+OB',        '필터': '7점 중 3점+',    '목표 R:R': '1:3', '비고': '손실 방어 우선'},
+        {'국면': 'NORMAL',     '진입': 'FVG+OB',        '필터': '없음 (최고성과)', '목표 R:R': '1:2', '비고': '+31.76% 백테스트'},
+        {'국면': 'AGGRESSIVE', '진입': 'FVG+OB',        '필터': '없음',           '목표 R:R': '1:2', '비고': 'VIX 20 미만 강세장'},
+    ]
+    df_guide = pd.DataFrame(guide_rows)
+
+    # 현재 국면 강조 표시
+    def _style_regime(row):
+        if row['국면'] == regime:
+            return [f'background-color:{meta["bg"]};color:{meta["color"]};font-weight:700'] * len(row)
+        return [''] * len(row)
+
+    st.dataframe(
+        df_guide.style.apply(_style_regime, axis=1),
+        use_container_width=True, hide_index=True
+    )
+
+    # ── 새로고침 버튼 ─────────────────────────────────────────────
+    st.markdown("")
+    if st.button("매크로 재조회", use_container_width=False):
+        st.rerun()

@@ -14,6 +14,11 @@ import json
 import os
 import sys
 import requests
+
+# Windows 콘솔 UTF-8
+if sys.platform == 'win32':
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 from pathlib import Path
 from datetime import datetime, timedelta, date
 

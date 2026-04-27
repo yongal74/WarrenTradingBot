@@ -236,14 +236,8 @@ with st.sidebar:
 
     page = st.radio("Navigation", [
         "Overview",
-        "Live Trading",
         "FVG+OB Signals",
         "Market Brain",
-        "Strategy Factory",
-        "Asset Analysis",
-        "Backtest Results",
-        "Trade Log",
-        "Settings",
     ], label_visibility="collapsed")
 
     # Portfolio mini-summary
@@ -322,19 +316,7 @@ st.markdown(f"""
 # ── Page Routing ──────────────────────────────────────────────────
 if page == "Overview":
     from dashboard.pages import page_overview; page_overview.render()
-elif page == "Live Trading":
-    from dashboard.pages import page_live; page_live.render()
 elif page == "FVG+OB Signals":
     from dashboard.pages import page_signals; page_signals.render()
 elif page == "Market Brain":
     from dashboard.pages import page_brain; page_brain.render()
-elif page == "Strategy Factory":
-    from dashboard.pages import page_strategy; page_strategy.render()
-elif page == "Asset Analysis":
-    from dashboard.pages import page_analysis; page_analysis.render()
-elif page == "Backtest Results":
-    from dashboard.pages import page_backtest; page_backtest.render()
-elif page == "Trade Log":
-    from dashboard.pages import page_trades; page_trades.render()
-elif page == "Settings":
-    from dashboard.pages import page_settings; page_settings.render()

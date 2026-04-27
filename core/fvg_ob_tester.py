@@ -10,10 +10,14 @@ FVG + Order Block 포워드 테스터
   AGGRESSIVE  → 순수 FVG+OB (필터 없음)
 """
 import warnings; warnings.filterwarnings('ignore')
-import pandas as pd
-import yfinance as yf
+import sys, pandas as pd, yfinance as yf
 from datetime import datetime
 from pathlib import Path
+
+# Windows 콘솔 UTF-8
+if sys.platform == 'win32':
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 
 from core.macro_regime import get_regime, min_quality_by_regime
 
