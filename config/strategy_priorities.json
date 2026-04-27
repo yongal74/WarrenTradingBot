@@ -1,0 +1,65 @@
+{
+  "009150": {
+    "best_strategy": "S13_ATR_Break",
+    "updated_at": "2026-04-27",
+    "stats_14d": {
+      "n": 3,
+      "win_rate": 33.3,
+      "total_pnl": 4.8,
+      "avg_pnl": 1.601,
+      "sharpe": 0.387
+    },
+    "top3": [
+      {
+        "strategy": "S13_ATR_Break",
+        "n": 3,
+        "win_rate": 33.3,
+        "total_pnl": 4.8,
+        "avg_pnl": 1.601,
+        "sharpe": 0.387
+      }
+    ]
+  },
+  "AMD": {
+    "best_strategy": "S13_ATR_Break",
+    "updated_at": "2026-04-27",
+    "stats_14d": {
+      "n": 4,
+      "win_rate": 75.0,
+      "total_pnl": 17.24,
+      "avg_pnl": 4.31,
+      "sharpe": 0.98
+    },
+    "top3": [
+      {
+        "strategy": "S13_ATR_Break",
+        "n": 4,
+        "win_rate": 75.0,
+        "total_pnl": 17.24,
+        "avg_pnl": 4.31,
+        "sharpe": 0.98
+      }
+    ]
+  },
+  "SOL": {
+    "best_strategy": "S07_RSI_Trend",
+    "updated_at": "2026-04-27",
+    "stats_14d": {
+      "n": 3,
+      "win_rate": 33.3,
+      "total_pnl": -3.94,
+      "avg_pnl": -1.314,
+      "sharpe": -0.747
+    },
+    "top3": [
+      {
+        "strategy": "S07_RSI_Trend",
+        "n": 3,
+        "win_rate": 33.3,
+        "total_pnl": -3.94,
+        "avg_pnl": -1.314,
+        "sharpe": -0.747
+      }
+    ]
+  }
+}

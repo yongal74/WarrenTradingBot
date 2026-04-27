@@ -41,7 +41,10 @@ def load(ticker: str, market: str = 'US', days: int = None, yf_suffix: str = Non
     end    = datetime.now().strftime('%Y-%m-%d')
 
     if market == 'CRYPTO':
-        return None  # 빗썸 연결 후 구현
+        # yfinance BTC-USD / ETH-USD 형태
+        from config.assets import CRYPTO_ASSETS
+        yf_tk = CRYPTO_ASSETS.get(ticker, {}).get('yf', f'{ticker}-USD')
+        df = _download_us(yf_tk, start, end)
     elif market == 'US':
         df = _download_us(ticker, start, end)
     else:
@@ -50,7 +53,7 @@ def load(ticker: str, market: str = 'US', days: int = None, yf_suffix: str = Non
         if df is None or len(df) < 30:
             df = _download_kr(ticker, start, end)
 
-    if df is not None and len(df) > 50:
+    if df is not None and len(df) > 10:
         df.to_csv(cache)
 
     return df
@@ -97,7 +100,15 @@ def load_intraday(ticker: str, interval: str = '5m') -> pd.DataFrame | None:
     """
     5분봉 / 1분봉 intraday 데이터 로드 (yfinance, 최대 60일)
     interval: '5m' (권장) or '1m' (7일만 가능)
+    코인은 BTC → BTC-USD 자동 변환
     """
+    # 코인 ticker 변환 (BTC → BTC-USD)
+    from config.assets import CRYPTO_ASSETS
+    if ticker in CRYPTO_ASSETS:
+        yf_ticker = CRYPTO_ASSETS[ticker].get('yf', f'{ticker}-USD')
+    else:
+        yf_ticker = ticker
+
     cache_key = f"{ticker.replace('/', '_')}_{interval}"
     cache = DATA_CACHE_DIR / f"{cache_key}.csv"
 
@@ -110,7 +121,7 @@ def load_intraday(ticker: str, interval: str = '5m') -> pd.DataFrame | None:
 
     try:
         period = '60d' if interval == '5m' else '7d'
-        df = yf.download(ticker, period=period, interval=interval,
+        df = yf.download(yf_ticker, period=period, interval=interval,
                          auto_adjust=True, progress=False)
         if df is None or df.empty:
             return None

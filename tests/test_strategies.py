@@ -84,10 +84,9 @@ class TestRiskManager:
         from core.risk_manager import RiskManager
         pm = PortfolioManager()
         rm = RiskManager(pm)
-        # -10% → 손절 (-7% 한도 초과)
-        assert rm.should_stop_loss(100.0, 90.0) == True
-        # -5% → 손절 안함
-        assert rm.should_stop_loss(100.0, 95.0) == False
+        # STOP_LOSS_PCT=-1.5% 기준
+        assert rm.should_stop_loss(100.0, 98.0) == True   # -2% → 손절
+        assert rm.should_stop_loss(100.0, 98.6) == False  # -1.4% → 유지
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

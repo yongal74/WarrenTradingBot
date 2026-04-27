@@ -172,7 +172,7 @@ def render():
             })
         df_t = pd.DataFrame(rows).sort_values('상태', ascending=False).reset_index(drop=True)
         df_t = df_t.drop(columns=['상태'])
-        st.dataframe(df_t, use_container_width=True, hide_index=True,
+        st.dataframe(df_t, width='stretch', hide_index=True,
                      column_config={'구분': st.column_config.TextColumn(width='small'),
                                     '신호': st.column_config.TextColumn(width='small')})
 
@@ -188,7 +188,7 @@ def render():
             font_color='#e6edf3', margin=dict(t=10, b=10, l=10, r=10),
             showlegend=True, legend=dict(font_color='#e6edf3'),
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
 
     # ── Tab3: 전종목 히트맵 ───────────────────────────────────
     with tab3:
@@ -223,4 +223,4 @@ def render():
                 xaxis=dict(tickangle=-45, color='#8b949e'),
                 yaxis=dict(color='#8b949e'),
             )
-            st.plotly_chart(fig2, use_container_width=True)
+            st.plotly_chart(fig2, width='stretch')

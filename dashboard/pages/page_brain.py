@@ -88,7 +88,7 @@ def render():
                 '변동성(연)':   f"{r['vol20']:.1f}%",
             }
             df_m = pd.DataFrame({'지표': list(metrics.keys()), '값': list(metrics.values())})
-            st.dataframe(df_m, use_container_width=True, hide_index=True)
+            st.dataframe(df_m, width='stretch', hide_index=True)
 
             # 차트
             fig = go.Figure()
@@ -112,7 +112,7 @@ def render():
                 yaxis=dict(gridcolor='#21262d',color='#8b949e'),
                 legend=dict(font=dict(color='#8b949e'),bgcolor='rgba(0,0,0,0)'),
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
 
     # 시장 국면 전략 추천
     st.markdown("---")
@@ -122,4 +122,4 @@ def render():
         {'국면':'🐻 BEAR','추천전략':'S12_BB_Rev, S15_ZScore, S08_RSI_Rev','설명':'평균회귀 전략으로 반등 포착'},
         {'국면':'⚖️ NEUTRAL','추천전략':'S07_RSI_Trend, S09_MACD, S19_Monday','설명':'범위 매매와 모멘텀 혼용'},
     ])
-    st.dataframe(df_rec, use_container_width=True, hide_index=True)
+    st.dataframe(df_rec, width='stretch', hide_index=True)

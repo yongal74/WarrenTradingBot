@@ -53,7 +53,7 @@ def render():
             yaxis=dict(color='#8b949e'),
             margin=dict(t=10,b=30,l=180,r=80),
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
         st.caption("🟢 신뢰가능(거래수≥5, PF<100) | 🔵 참고용")
 
     with tab2:
@@ -72,7 +72,7 @@ def render():
                 xaxis=dict(gridcolor='#21262d',color='#8b949e'),
                 yaxis=dict(color='#8b949e'),
             )
-            st.plotly_chart(fig2, use_container_width=True)
+            st.plotly_chart(fig2, width='stretch')
 
         with col2:
             top_mdd = grp.sort_values('avg_mdd',ascending=False).head(10).reset_index(drop=True)
@@ -88,13 +88,13 @@ def render():
                 xaxis=dict(gridcolor='#21262d',color='#8b949e',title='MDD (%)'),
                 yaxis=dict(color='#8b949e'),
             )
-            st.plotly_chart(fig3, use_container_width=True)
+            st.plotly_chart(fig3, width='stretch')
 
     with tab3:
         top3_path = RESULT_DIR / 'top3_per_asset.csv'
         if top3_path.exists():
             df3 = pd.read_csv(top3_path, encoding='utf-8-sig')
-            st.dataframe(df3, use_container_width=True, hide_index=True)
+            st.dataframe(df3, width='stretch', hide_index=True)
         else:
             st.info("top3_per_asset.csv 없음")
 
@@ -115,5 +115,5 @@ def render():
 
         st.dataframe(
             df_sel_show.style.map(color_ret, subset=['TotalRet%','MDD%']),
-            use_container_width=True, hide_index=True
+            width='stretch', hide_index=True
         )

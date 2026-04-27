@@ -23,13 +23,12 @@ US_ASSETS = {
     'SOXX': {'name': '반도체ETF',  'strategies': ['S17_FVG', 'S26_OB',       'S02_EMA20_50']},
 }
 
-# 코인 (빗썸 — 추후 연결)
+# 코인 (yfinance — BTC/ETH/SOL/XRP 4종 포워드테스트)
 CRYPTO_ASSETS = {
-    'BTC':  {'name': '비트코인',     'strategies': ['S17_FVG', 'S26_OB', 'S07_RSI_Trend']},
-    'ETH':  {'name': '이더리움',     'strategies': ['S17_FVG', 'S26_OB', 'S01_EMA9_21']},
-    'SOL':  {'name': '솔라나',       'strategies': ['S17_FVG', 'S26_OB', 'S07_RSI_Trend']},
-    'XRP':  {'name': '리플',         'strategies': ['S17_FVG', 'S26_OB', 'S09_MACD']},
-    'BNB':  {'name': '바이낸스코인', 'strategies': ['S17_FVG', 'S26_OB', 'S01_EMA9_21']},
+    'BTC':  {'name': '비트코인', 'yf': 'BTC-USD', 'strategies': ['S17_FVG', 'S26_OB', 'S07_RSI_Trend']},
+    'ETH':  {'name': '이더리움', 'yf': 'ETH-USD', 'strategies': ['S17_FVG', 'S26_OB', 'S01_EMA9_21']},
+    'SOL':  {'name': '솔라나',   'yf': 'SOL-USD', 'strategies': ['S17_FVG', 'S26_OB', 'S07_RSI_Trend']},
+    'XRP':  {'name': '리플',     'yf': 'XRP-USD', 'strategies': ['S17_FVG', 'S26_OB', 'S09_MACD']},
 }
 
 # 전체 통합

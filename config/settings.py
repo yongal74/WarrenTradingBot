@@ -11,12 +11,23 @@ load_dotenv(BASE_DIR / '.env')
 TRADING_MODE   = os.getenv('TRADING_MODE', 'PAPER')   # PAPER / LIVE
 PAPER_CAPITAL  = float(os.getenv('PAPER_CAPITAL', '10000000'))
 
-# 리스크 한도 (CLAUDE.md 준수)
-MAX_POSITION_PCT   = 0.10   # 단일 포지션 최대 10%
-DAILY_LOSS_LIMIT   = -0.02  # 일일 손실 -2%
-WEEKLY_LOSS_LIMIT  = -0.05  # 주간 손실 -5%
-MDD_LIMIT          = -0.15  # MDD -15% 봇 정지
-STOP_LOSS_PCT      = -0.07  # 개별 포지션 손절 -7%
+# ── Phase 1 시드 자금 (포워드 테스트) ─────────────────────
+SEED_KR        = 10_000_000   # 한국주식 시드
+SEED_US        = 10_000_000   # 미국주식 시드
+SEED_CRYPTO    =  5_000_000   # 코인 시드
+TOTAL_SEED     = SEED_KR + SEED_US + SEED_CRYPTO  # 2500만원
+
+# ── 리스크 관리 (트레이드당 2% 리스크) ───────────────────
+RISK_PCT_PER_TRADE = 0.02     # 트레이드당 최대 리스크 2%
+#   KR  1000만 × 2% = 20만원/trade
+#   US  1000만 × 2% = 20만원/trade
+#   코인  500만 × 2% = 10만원/trade
+MIN_RR             = 2.0      # 최소 손익비 1:2
+MAX_POSITION_PCT   = 0.10     # 단일 포지션 최대 10%
+DAILY_LOSS_LIMIT   = -0.06   # 일일 손실 한도 -6% (3번 손절시 중단)
+WEEKLY_LOSS_LIMIT  = -0.10   # 주간 손실 한도 -10%
+MDD_LIMIT          = -0.20   # MDD -20% 봇 자동 정지
+STOP_LOSS_PCT      = -0.015  # 개별 포지션 백스톱 -1.5% (FVG/OB MAX_SL_PCT와 동일)
 
 # 데이터 설정
 DATA_START         = '2023-01-01'
