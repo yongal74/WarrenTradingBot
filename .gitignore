@@ -1,0 +1,29 @@
+# API 키 절대 커밋 금지
+.env
+*.env
+
+# 캐시/데이터
+data/cache/
+__pycache__/
+*.pyc
+*.pyo
+
+# 로그/리포트
+logs/
+reports/
+*.log
+
+# 백테스트 결과
+backtest_results/
+
+# IDE
+.vscode/
+.idea/
+
+# 파이썬 빌드
+build/
+dist/
+*.egg-info/
+
+# Streamlit
+.streamlit/secrets.toml
