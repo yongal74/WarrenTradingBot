@@ -2,12 +2,20 @@
 """
 FVG + Order Block 포워드 테스터
 백테스트와 동일한 로직으로 실시간 신호 감지
+
+5-Pillar 연동:
+  HALT        → 전면 차단
+  DEFENSIVE   → FVG+OB + 7점 품질 필터 (3점 이상)
+  NORMAL      → 순수 FVG+OB (필터 없음, 백테스트 최고 성과)
+  AGGRESSIVE  → 순수 FVG+OB (필터 없음)
 """
 import warnings; warnings.filterwarnings('ignore')
 import pandas as pd
 import yfinance as yf
 from datetime import datetime
 from pathlib import Path
+
+from core.macro_regime import get_regime, min_quality_by_regime
 
 # ── 파라미터 (백테스트와 동일) ────────────────────────────────
 RR_RATIO    = 2.0
@@ -188,9 +196,10 @@ def _check_signal(df: pd.DataFrame) -> dict | None:
             sl = entry - entry * sl_pct
             tp = entry + entry * sl_pct * RR_RATIO
 
-            # ── 진입 품질 점수 (참고용, 필터링 안함) ─────────
-            # 백테스트 결과: FVG+OB 단독이 필터 적용보다 총수익 +31.76% vs +6.32%
-            # 품질 점수는 대시보드 표시용으로만 사용
+            # ── Pillar 3 품질 점수 ──────────────────────────
+            # NORMAL/AGGRESSIVE: 필터 없음 (백테스트 +31.76% 최고 성과)
+            # DEFENSIVE:         3점 이상만 허용 (손실 방어)
+            # min_quality는 scan_all()에서 주입 (기본 0 = 필터 없음)
             quality_score, quality_tags = _entry_quality_score(df, entry, zl)
 
             return {
@@ -209,15 +218,42 @@ def _check_signal(df: pd.DataFrame) -> dict | None:
     return None
 
 
+def _check_signal_with_quality(df: pd.DataFrame, min_q: int) -> dict | None:
+    """min_q 품질 기준 적용한 신호 체크 래퍼"""
+    sig = _check_signal(df)
+    if sig is None:
+        return None
+    if min_q > 0 and sig.get('quality_score', 0) < min_q:
+        return None
+    return sig
+
+
 def scan_all() -> list:
-    """전 종목 FVG+OB 신호 스캔 (KR5 + US5 + CRYPTO4)"""
+    """전 종목 FVG+OB 신호 스캔 (KR5 + US5 + CRYPTO4)
+    Pillar 1 매크로 국면에 따라 자동으로 필터 강도 조절
+    """
     signals = []
     now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    # ── Pillar 1: 매크로 국면 판단 ───────────────────────
+    try:
+        regime, macro_data = get_regime()
+    except Exception:
+        regime, macro_data = 'NORMAL', {}
+
+    min_q = min_quality_by_regime(regime)
 
     print(f"\n{'='*65}")
     print(f"  FVG+OB Forward Scanner [{now_str}]")
     print(f"  KR 5종목 + US 5종목 + CRYPTO 4종목 (15분봉)")
+    print(f"  Pillar1 Regime: [{regime}]  품질필터: {min_q}점 이상" +
+          (f"  VIX={macro_data.get('vix','?'):.1f}" if macro_data.get('vix') else ""))
     print(f"{'='*65}\n")
+
+    # HALT → 전면 차단
+    if regime == 'HALT':
+        print(f"  *** HALT: VIX={macro_data.get('vix','?')} 위기 수준 — 오늘 거래 없음 ***")
+        return []
 
     # ── 한국주식 ────────────────────────────────────────────
     print("  [한국주식]")
@@ -227,7 +263,7 @@ def scan_all() -> list:
             print(f"    {name}({code}): 데이터 없음")
             continue
         price = float(df['Close'].iloc[-1])
-        sig = _check_signal(df)
+        sig = _check_signal_with_quality(df, min_q)
         if sig:
             print(f"    *** {name}({code}) | {sig['type']} 신호 | "
                   f"현재가={price:,.0f} | 진입={sig['entry']:,.0f} | "
@@ -245,7 +281,7 @@ def scan_all() -> list:
             print(f"    {name}({code}): 데이터 없음")
             continue
         price = float(df['Close'].iloc[-1])
-        sig = _check_signal(df)
+        sig = _check_signal_with_quality(df, min_q)
         if sig:
             print(f"    *** {name}({code}) | {sig['type']} 신호 | "
                   f"현재가={price:.2f} | 진입={sig['entry']:.2f} | "
@@ -263,7 +299,7 @@ def scan_all() -> list:
             print(f"    {name}({code}): 데이터 없음")
             continue
         price = float(df['Close'].iloc[-1])
-        sig = _check_signal(df)
+        sig = _check_signal_with_quality(df, min_q)
         if sig:
             print(f"    *** {name}({code}) | {sig['type']} 신호 | "
                   f"현재가={price:.2f} | 진입={sig['entry']:.2f} | "

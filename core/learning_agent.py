@@ -28,6 +28,8 @@ load_dotenv(Path(__file__).parent.parent / '.env')
 from config.assets import ALL_ASSETS
 from data.data_loader import load
 from core.strategy_factory import _compute_all, _atr
+from core.macro_regime import get_regime
+from core.fvg_ob_tester import _entry_quality_score
 
 # ── 경로 ─────────────────────────────────────────────────
 BASE_DIR         = Path(__file__).parent.parent
@@ -287,6 +289,145 @@ def _send_report(lines: list, changed: list, today: str):
     print(f"  [Telegram] 학습 리포트 발송 완료")
 
 
+def analyze_pillar_defense() -> dict:
+    """
+    5-Pillar 손실 방어 검증 (복기 핵심)
+    forward_signals.csv의 최근 신호들을 시뮬레이션해
+    "Pillar 스크리닝이 있었다면 손실을 막았을까?" 를 검증.
+
+    검증 방법:
+    1. 최근 N일 신호 로드
+    2. 각 신호에 대해 이후 봉에서 TP/SL 도달 여부 시뮬
+    3. 손실 거래에 대해 Pillar1(macro) / Pillar4(quality) 적용시 차단됐는지 확인
+    4. 차단율 → 학습 리포트에 포함
+    """
+    sig_log = LOG_DIR / 'forward_signals.csv'
+    if not sig_log.exists():
+        return {'checked': 0, 'pillar1_blocked': 0, 'pillar4_blocked': 0}
+
+    df_sig = pd.read_csv(sig_log, encoding='utf-8-sig')
+    if df_sig.empty:
+        return {'checked': 0, 'pillar1_blocked': 0, 'pillar4_blocked': 0}
+
+    # 최근 14일 신호만
+    cutoff = (datetime.now() - timedelta(days=14)).strftime('%Y-%m-%d')
+    date_col = 'datetime' if 'datetime' in df_sig.columns else 'date'
+    if date_col in df_sig.columns:
+        df_sig = df_sig[df_sig[date_col].astype(str) >= cutoff]
+
+    if df_sig.empty:
+        return {'checked': 0, 'pillar1_blocked': 0, 'pillar4_blocked': 0}
+
+    # 현재 매크로 국면
+    try:
+        regime, macro_data = get_regime()
+    except Exception:
+        regime, macro_data = 'NORMAL', {}
+
+    results = []
+    for _, row in df_sig.iterrows():
+        ticker = str(row.get('ticker', ''))
+        market = str(row.get('market', 'US'))
+        entry  = float(row.get('entry', 0))
+        tp_pct = float(row.get('tp_pct', 0))
+        sl_pct = float(row.get('sl_pct', 0))
+        q_score= int(row.get('quality_score', 0)) if 'quality_score' in row else 0
+
+        if entry <= 0:
+            continue
+
+        # 이후 실제 가격 시뮬 (데이터 로드)
+        asset = ALL_ASSETS.get(ticker, {})
+        df_price = load(ticker, market, days=20)
+        outcome = 'UNKNOWN'
+        if df_price is not None and len(df_price) >= 5:
+            # 신호 날짜 이후 최대 5봉 확인
+            tp_price = entry * (1 + tp_pct / 100)
+            sl_price = entry * (1 + sl_pct / 100)
+            for i in range(min(5, len(df_price))):
+                hi = float(df_price['High'].iloc[-(5-i)])
+                lo = float(df_price['Low'].iloc[-(5-i)])
+                if hi >= tp_price:
+                    outcome = 'WIN'; break
+                if lo <= sl_price:
+                    outcome = 'LOSS'; break
+
+        # Pillar 차단 여부
+        pillar1_block = (regime == 'HALT') or (regime == 'DEFENSIVE' and q_score < 3)
+        pillar4_block = q_score < 3  # 품질 필터 단독
+
+        results.append({
+            'ticker':       ticker,
+            'outcome':      outcome,
+            'pillar1_block': pillar1_block,
+            'pillar4_block': pillar4_block,
+            'quality_score': q_score,
+            'regime':        regime,
+        })
+
+    if not results:
+        return {'checked': 0, 'pillar1_blocked': 0, 'pillar4_blocked': 0}
+
+    df_r = pd.DataFrame(results)
+    losses = df_r[df_r['outcome'] == 'LOSS']
+    p1_blocked = len(losses[losses['pillar1_block']]) if len(losses) > 0 else 0
+    p4_blocked = len(losses[losses['pillar4_block']]) if len(losses) > 0 else 0
+
+    summary = {
+        'checked':         len(results),
+        'wins':            len(df_r[df_r['outcome'] == 'WIN']),
+        'losses':          len(losses),
+        'unknown':         len(df_r[df_r['outcome'] == 'UNKNOWN']),
+        'pillar1_blocked': p1_blocked,
+        'pillar4_blocked': p4_blocked,
+        'p1_defense_rate': round(p1_blocked / max(len(losses), 1) * 100, 1),
+        'p4_defense_rate': round(p4_blocked / max(len(losses), 1) * 100, 1),
+        'current_regime':  regime,
+        'macro':           macro_data,
+    }
+
+    # 텔레그램 리포트
+    if results:
+        today = date.today().strftime('%Y-%m-%d')
+        lines = [
+            f"<b>[Warren 복기] 5-Pillar 손실 방어 검증</b>",
+            f"{today} | 매크로: <b>{regime}</b>",
+            f"VIX={macro_data.get('vix','?'):.1f}  DXY={macro_data.get('dxy','?'):.1f}"
+            f"  US10Y={macro_data.get('t10y','?'):.2f}%  KRW={macro_data.get('krw','?'):.0f}",
+            f"{'─'*30}",
+            f"분석 신호: {len(results)}건",
+            f"  ✅ WIN:  {summary['wins']}건",
+            f"  ❌ LOSS: {summary['losses']}건",
+            f"  ❓ 미확정: {summary['unknown']}건",
+        ]
+        if summary['losses'] > 0:
+            lines += [
+                f"{'─'*30}",
+                f"<b>Pillar 방어 효과:</b>",
+                f"  Pillar1 (매크로): {p1_blocked}/{summary['losses']} 손실 차단 ({summary['p1_defense_rate']:.0f}%)",
+                f"  Pillar4 (품질점수): {p4_blocked}/{summary['losses']} 손실 차단 ({summary['p4_defense_rate']:.0f}%)",
+            ]
+            if summary['p1_defense_rate'] >= 50:
+                lines.append("→ Pillar 스크리닝 효과 검증됨")
+            else:
+                lines.append("→ Pillar 추가 학습 필요 (손실 패턴 분석 중)")
+        else:
+            lines.append("손실 없음 — 검증 데이터 누적 중")
+
+        _tg("\n".join(lines))
+        print(f"  [5-Pillar 복기] 분석 {len(results)}건 | "
+              f"손실={summary['losses']} | P1차단={p1_blocked} | P4차단={p4_blocked}")
+
+    return summary
+
+
 if __name__ == '__main__':
+    print("\n[1] 전략 우선순위 학습...")
     result = run_learning()
     print(f"\n  완료: {result['updated']}종목 분석, 전략 변경 {len(result['changed'])}건")
+
+    print("\n[2] 5-Pillar 손실 방어 검증...")
+    defense = analyze_pillar_defense()
+    print(f"  완료: {defense['checked']}건 분석, "
+          f"P1 방어율={defense.get('p1_defense_rate', 0):.0f}%, "
+          f"P4 방어율={defense.get('p4_defense_rate', 0):.0f}%")
