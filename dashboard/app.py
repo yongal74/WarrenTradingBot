@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Warren Trading Bot — Professional Dashboard v3.0"""
+"""Warren Trading Bot — Professional Dashboard v4.0"""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -230,19 +230,20 @@ with st.sidebar:
     st.markdown("""
     <div style='padding:12px 16px 8px;border-bottom:1px solid #2a2e39;margin-bottom:8px;'>
       <div style='font-size:15px;font-weight:700;color:#d1d4dc;'>W Warren Bot</div>
-      <div style='font-size:10px;color:#787b86;margin-top:2px;'>FVG+OB Auto Trader v3.0</div>
+      <div style='font-size:10px;color:#787b86;margin-top:2px;'>Multi-Strategy v5.0 | CB-1.5% MDD-10%</div>
     </div>
     """, unsafe_allow_html=True)
 
     page = st.radio("Navigation", [
         "Overview",
-        "Live Trading",
+        "Paper Trading",
+        "투자일지",
         "FVG+OB Signals",
         "Market Brain",
-        "Strategy Factory",
-        "Asset Analysis",
         "Backtest Results",
+        "Live Trading",
         "Trade Log",
+        "시스템 문서",
         "Settings",
     ], label_visibility="collapsed")
 
@@ -301,12 +302,39 @@ with st.sidebar:
     if st.button("새로고침", use_container_width=True):
         st.rerun()
 
+    # ── 저널 갱신 트리거 감지 (07:00/17:00/21:00 자동 반영) ──────
+    import json as _json
+    _trigger = Path(__file__).parent.parent / 'logs' / 'dashboard_refresh.json'
+    _last_refresh = st.session_state.get('_last_dashboard_refresh', '')
+    if _trigger.exists():
+        try:
+            _t = _json.loads(_trigger.read_text(encoding='utf-8'))
+            _updated = _t.get('last_updated', '')
+            if _updated and _updated != _last_refresh:
+                st.session_state['_last_dashboard_refresh'] = _updated
+                _session_label = {'morning':'아침브리핑','afternoon':'KR마감복기','evening':'전체복기'}.get(_t.get('session',''), '업데이트')
+                st.success(f"📋 {_session_label} 완료 — 대시보드 자동 갱신 ({_updated})")
+                st.rerun()
+        except Exception:
+            pass
+
 # ── Top Status Bar ────────────────────────────────────────────────
 mkt = _market_status()
 def _mkt_pill(label, status):
     cls = {'open':'mkt-open','closed':'mkt-closed','pre':'mkt-pre'}.get(status,'mkt-closed')
     dot = {'open':'●','closed':'○','pre':'◐'}.get(status,'○')
     return f"<span class='mkt-pill {cls}'>{dot} {label}</span>"
+
+_journal_updated = ''
+try:
+    import json as _json2
+    _tr2 = Path(__file__).parent.parent / 'logs' / 'dashboard_refresh.json'
+    if _tr2.exists():
+        _td = _json2.loads(_tr2.read_text(encoding='utf-8'))
+        _session_kor = {'morning':'07:00 아침브리핑','afternoon':'17:00 KR마감복기','evening':'21:00 전체복기'}.get(_td.get('session',''), '업데이트')
+        _journal_updated = f' | 📋 {_session_kor} {_td.get("last_updated","")}'
+except Exception:
+    pass
 
 st.markdown(f"""
 <div class='top-bar'>
@@ -315,26 +343,29 @@ st.markdown(f"""
   {_mkt_pill('KR',mkt['kr'])}
   {_mkt_pill('US',mkt['us'])}
   {_mkt_pill('CRYPTO',mkt['crypto'])}
-  <span style='margin-left:auto;'>{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</span>
+  <span style='margin-left:auto;font-size:11px;color:#787b86;'>{_journal_updated}</span>
+  <span style='color:#d1d4dc;font-size:12px;margin-left:12px;'>{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</span>
 </div>
 """, unsafe_allow_html=True)
 
 # ── Page Routing ──────────────────────────────────────────────────
 if page == "Overview":
     from dashboard._pages import _page_overview as _po; _po.render()
-elif page == "Live Trading":
-    from dashboard._pages import _page_live as _pl; _pl.render()
+elif page == "Paper Trading":
+    from dashboard._pages import _page_paper as _ppt; _ppt.render()
+elif page == "투자일지":
+    from dashboard._pages import _page_journal as _pj; _pj.show()
 elif page == "FVG+OB Signals":
     from dashboard._pages import _page_signals as _ps; _ps.render()
 elif page == "Market Brain":
     from dashboard._pages import _page_brain as _pb; _pb.render()
-elif page == "Strategy Factory":
-    from dashboard._pages import _page_strategy as _pst; _pst.render()
-elif page == "Asset Analysis":
-    from dashboard._pages import _page_analysis as _pa; _pa.render()
 elif page == "Backtest Results":
     from dashboard._pages import _page_backtest as _pbk; _pbk.render()
+elif page == "Live Trading":
+    from dashboard._pages import _page_live as _pl; _pl.render()
 elif page == "Trade Log":
     from dashboard._pages import _page_trades as _ptr; _ptr.render()
+elif page == "시스템 문서":
+    from dashboard._pages import _page_docs as _pdc; _pdc.render()
 elif page == "Settings":
     from dashboard._pages import _page_settings as _pse; _pse.render()

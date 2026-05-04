@@ -24,9 +24,9 @@ RISK_PCT_PER_TRADE = 0.02     # 트레이드당 최대 리스크 2%
 #   코인  500만 × 2% = 10만원/trade
 MIN_RR             = 2.0      # 최소 손익비 1:2
 MAX_POSITION_PCT   = 0.10     # 단일 포지션 최대 10%
-DAILY_LOSS_LIMIT   = -0.06   # 일일 손실 한도 -6% (3번 손절시 중단)
-WEEKLY_LOSS_LIMIT  = -0.10   # 주간 손실 한도 -10%
-MDD_LIMIT          = -0.20   # MDD -20% 봇 자동 정지
+DAILY_LOSS_LIMIT   = -0.015  # 일일 손실 한도 -1.5% (V5.0 강화)
+WEEKLY_LOSS_LIMIT  = -0.05   # 주간 손실 한도 -5%
+MDD_LIMIT          = -0.10   # MDD -10% 봇 자동 정지 (V5.0 강화)
 STOP_LOSS_PCT      = -0.015  # 개별 포지션 백스톱 -1.5% (FVG/OB MAX_SL_PCT와 동일)
 
 # 데이터 설정
@@ -52,3 +52,7 @@ ALPACA_BASE_URL    = os.getenv('ALPACA_BASE_URL', 'https://paper-api.alpaca.mark
 # 텔레그램
 TELEGRAM_TOKEN     = os.getenv('TELEGRAM_TOKEN', '')
 TELEGRAM_CHAT_ID   = os.getenv('TELEGRAM_CHAT_ID', '')
+
+# ── V5.1 추가 리스크 상수 ─────────────────────────────────────────
+MAX_SECTOR_POSITIONS = int(os.getenv('MAX_SECTOR_POSITIONS', '2'))   # 동일 섹터 최대 포지션
+RISK_PER_TRADE_PCT   = float(os.getenv('RISK_PER_TRADE_PCT', '0.003'))  # Risk-based sizing 기준 (0.3%)

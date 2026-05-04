@@ -107,6 +107,176 @@ def get_price(ticker: str) -> int:
     return int(d.get('output', {}).get('stck_prpr', 0))
 
 
+def get_daily_df(ticker: str, count: int = 200) -> 'pd.DataFrame | None':
+    """
+    KIS API로 KR 종목 일봉 OHLCV 반환.
+    TR: FHKST03010100 (국내주식 기간별시세 일봉)
+    최대 100건씩 2회 호출 → 최대 200봉 반환.
+    """
+    import pandas as pd
+    from datetime import timedelta
+
+    all_rows = []
+    end_dt = datetime.now()
+
+    for _ in range(max(1, (count // 100) + 1)):
+        start_dt = end_dt - timedelta(days=150)  # ~100 거래일
+        try:
+            r = requests.get(
+                f'{BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice',
+                headers=_headers('FHKST03010100'),
+                params={
+                    'FID_COND_MRKT_DIV_CODE': 'J',
+                    'FID_INPUT_ISCD':         ticker,
+                    'FID_INPUT_DATE_1':        start_dt.strftime('%Y%m%d'),
+                    'FID_INPUT_DATE_2':        end_dt.strftime('%Y%m%d'),
+                    'FID_PERIOD_DIV_CODE':     'D',
+                    'FID_ORG_ADJ_PRC':         '0',
+                },
+                timeout=10
+            )
+            d = r.json()
+        except Exception:
+            break
+
+        if d.get('rt_cd') != '0':
+            break
+        rows = d.get('output2', [])
+        if not rows:
+            break
+        all_rows.extend(rows)
+        end_dt = start_dt - timedelta(days=1)
+        if len(all_rows) >= count:
+            break
+
+    if not all_rows:
+        return None
+
+    records = []
+    for row in all_rows:
+        try:
+            records.append({
+                'Date':   row['stck_bsop_date'],
+                'Open':   float(row['stck_oprc']),
+                'High':   float(row['stck_hgpr']),
+                'Low':    float(row['stck_lwpr']),
+                'Close':  float(row['stck_clpr']),
+                'Volume': float(row['acml_vol']),
+            })
+        except (KeyError, ValueError):
+            continue
+
+    if not records:
+        return None
+
+    df = pd.DataFrame(records)
+    df['Date'] = pd.to_datetime(df['Date'], format='%Y%m%d')
+    df = df.sort_values('Date').drop_duplicates('Date').set_index('Date')
+    return df[['Open', 'High', 'Low', 'Close', 'Volume']].tail(count)
+
+
+def get_ohlcv_15m(ticker: str, count: int = 96) -> 'pd.DataFrame | None':
+    """
+    KIS API로 KR 종목 15분봉 OHLCV 조회 (당일 포함 실시간)
+    TR: FHKST03010200 (국내주식 분봉조회)
+    count: 최대 봉 수 (기본 96 = 24시간치 15분봉)
+    """
+    import pandas as pd
+    try:
+        now = datetime.now()
+        end_time = now.strftime('%H%M%S')
+        r = requests.get(
+            f'{BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice',
+            headers=_headers('FHKST03010200'),
+            params={
+                'FID_ETC_CLS_CODE':       '',
+                'FID_COND_MRKT_DIV_CODE': 'J',
+                'FID_INPUT_ISCD':         ticker,
+                'FID_INPUT_HOUR_1':       end_time,
+                'FID_PW_DATA_INCU_YN':    'Y',   # 과거 데이터 포함
+            },
+            timeout=10
+        )
+        d = r.json()
+        if d.get('rt_cd') != '0':
+            return None
+        rows = d.get('output2', [])
+        if not rows:
+            return None
+
+        records = []
+        for row in rows:
+            try:
+                records.append({
+                    'Open':   float(row['stck_oprc']),
+                    'High':   float(row['stck_hgpr']),
+                    'Low':    float(row['stck_lwpr']),
+                    'Close':  float(row['stck_prpr']),
+                    'Volume': float(row['cntg_vol']),
+                })
+            except Exception:
+                continue
+
+        if not records:
+            return None
+
+        df = pd.DataFrame(records[::-1])  # 시간순 정렬
+        return df
+    except Exception:
+        return None
+
+
+def get_ohlcv_5m(ticker: str, count: int = 120) -> 'pd.DataFrame | None':
+    """
+    KIS API로 KR 종목 5분봉 OHLCV 조회 (당일 포함 실시간)
+    TR: FHKST03010200 (국내주식 분봉조회) — FID_ETC_CLS_CODE='005' 사용
+    count: 최대 봉 수 (기본 120 = 10시간치 5분봉)
+    """
+    import pandas as pd
+    try:
+        now = datetime.now()
+        end_time = now.strftime('%H%M%S')
+        r = requests.get(
+            f'{BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice',
+            headers=_headers('FHKST03010200'),
+            params={
+                'FID_ETC_CLS_CODE':       '005',  # 5분봉
+                'FID_COND_MRKT_DIV_CODE': 'J',
+                'FID_INPUT_ISCD':         ticker,
+                'FID_INPUT_HOUR_1':       end_time,
+                'FID_PW_DATA_INCU_YN':    'Y',
+            },
+            timeout=10
+        )
+        d = r.json()
+        if d.get('rt_cd') != '0':
+            return None
+        rows = d.get('output2', [])
+        if not rows:
+            return None
+
+        records = []
+        for row in rows:
+            try:
+                records.append({
+                    'Open':   float(row['stck_oprc']),
+                    'High':   float(row['stck_hgpr']),
+                    'Low':    float(row['stck_lwpr']),
+                    'Close':  float(row['stck_prpr']),
+                    'Volume': float(row['cntg_vol']),
+                })
+            except Exception:
+                continue
+
+        if not records:
+            return None
+
+        df = pd.DataFrame(records[::-1])  # 시간순 정렬
+        return df
+    except Exception:
+        return None
+
+
 def buy_order(ticker: str, qty: int, price: int = 0) -> dict:
     """
     모의투자 매수 주문

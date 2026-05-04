@@ -57,6 +57,11 @@ MAX_SL_PCT  = 0.015
 MIN_SL_PCT  = 0.001
 ZONE_EXPIRE = 20
 
+# ── 필터링 백테스트 파라미터 ──────────────────────────────────────
+MIN_QUALITY_SCORE = 4        # 7점 중 4점 이상
+MAX_DAILY_TRADES  = 5        # 하루 최대 거래 건수
+LIQUID_HOURS_KST  = set(range(9, 12)) | set(range(22, 25))  # 고유동성 시간
+
 
 # ── 데이터 로드 ───────────────────────────────────────────────────
 def _load(yf_ticker: str, interval: str, period: str) -> pd.DataFrame | None:
@@ -101,6 +106,67 @@ def _detect_ob(df):
             zones.append({'type':'OB','formed_i':i,'zone_high':float(b['High']),
                           'zone_low':float(b['Low']),'expire_i':i+ZONE_EXPIRE})
     return zones
+
+
+# ── 진입 품질 점수 (백테스트용) ───────────────────────────────────
+def _quality_score_bt(df: pd.DataFrame, i: int, zone_low: float) -> int:
+    """인덱스 i 기준 과거 데이터로 품질 점수 계산 (0~7)"""
+    if i < 30:
+        return 0
+    sub = df.iloc[max(0, i-50):i+1]
+    c   = sub['Close']
+    score = 0
+
+    # 1) RSI < 65
+    d = c.diff()
+    g = d.clip(lower=0).ewm(com=13, min_periods=14).mean()
+    l = (-d).clip(lower=0).ewm(com=13, min_periods=14).mean()
+    rsi = (100 - 100 / (1 + g / l.replace(0, float('nan')))).iloc[-1]
+    if not pd.isna(rsi) and rsi < 65:
+        score += 1
+
+    # 2) 거래량 확인
+    vol = sub['Volume']
+    avg_vol = vol.rolling(20).mean().iloc[-1]
+    if vol.iloc[-1] > avg_vol * 0.8:
+        score += 1
+
+    # 3) EMA 정배열 (9 > 21 > 50)
+    e9  = c.ewm(span=9,  adjust=False).mean().iloc[-1]
+    e21 = c.ewm(span=21, adjust=False).mean().iloc[-1]
+    e50 = c.ewm(span=50, adjust=False).mean().iloc[-1]
+    if e9 > e21 > e50:
+        score += 1
+
+    # 4) 구간 신선도 (최근 10봉 접촉 ≤ 1회)
+    recent_lows = sub['Low'].tail(10).values
+    touches = sum(1 for lo in recent_lows[:-1]
+                  if zone_low * 0.995 <= lo <= zone_low * 1.02)
+    if touches <= 1:
+        score += 1
+
+    # 5) 핀바 구조
+    bar = sub.iloc[-1]
+    body = abs(float(bar['Close']) - float(bar['Open']))
+    lower_wick = float(min(bar['Open'], bar['Close'])) - float(bar['Low'])
+    candle_range = float(bar['High']) - float(bar['Low'])
+    if candle_range > 0 and lower_wick > body and lower_wick / candle_range > 0.35:
+        score += 1
+
+    # 6) VWAP 위
+    tp = (sub['High'] + sub['Low'] + sub['Close']) / 3
+    vol_s = sub['Volume'].replace(0, float('nan'))
+    vwap = (tp * vol_s).cumsum() / vol_s.cumsum()
+    if not pd.isna(vwap.iloc[-1]) and float(c.iloc[-1]) >= float(vwap.iloc[-1]) * 0.998:
+        score += 1
+
+    # 7) 직전 스윙로우 위
+    entry = float(c.iloc[-1])
+    swing_low = float(sub['Low'].tail(10).iloc[:-1].min())
+    if entry > swing_low * 0.998:
+        score += 1
+
+    return score
 
 
 # ── FVG+OB 백테스트 ───────────────────────────────────────────────
@@ -166,6 +232,95 @@ def _backtest_fvg_ob(df: pd.DataFrame, htf_trend: pd.Series = None) -> dict:
                 entry_i = i
                 in_pos = True
                 zone_type = z['type']
+                break
+
+    return _calc_metrics(trades)
+
+
+def _backtest_fvg_ob_filtered(df: pd.DataFrame) -> dict:
+    """
+    필터링 FVG+OB 백테스트
+    - 품질 점수 >= MIN_QUALITY_SCORE (4점)
+    - 하루 최대 MAX_DAILY_TRADES (5건)
+    - 고유동성 시간대만 (KST 9~11시, 22~24시)
+    """
+    all_zones = sorted(_detect_fvg(df) + _detect_ob(df), key=lambda z: z['formed_i'])
+    trades = []
+    active = []
+    in_pos = False
+    entry_p = sl_p = tp_p = 0.0
+    entry_i = 0
+    zone_type = ''
+    daily_counts: dict = {}   # date → count
+
+    for i in range(3, len(df)):
+        bar = df.iloc[i]
+        hi  = float(bar['High'])
+        lo  = float(bar['Low'])
+        op  = float(bar['Open'])
+        cl  = float(bar['Close'])
+        ts  = df.index[i]
+
+        # ── 시간대 필터 (KST = UTC+9) ────────────────────
+        ts_kst_hour = (ts.hour + 9) % 24
+        if ts_kst_hour not in LIQUID_HOURS_KST and not in_pos:
+            # 보유 중이면 청산은 허용
+            pass
+
+        for z in all_zones:
+            if z['formed_i'] == i - 1:
+                active.append(z)
+        active = [z for z in active if z['expire_i'] > i]
+
+        if in_pos:
+            if op <= sl_p:
+                pnl = (op - entry_p) / entry_p * 100
+                trades.append({'pnl': pnl, 'win': False, 'type': zone_type})
+                in_pos = False; continue
+            if hi >= tp_p:
+                pnl = (tp_p - entry_p) / entry_p * 100
+                trades.append({'pnl': pnl, 'win': True, 'type': zone_type})
+                in_pos = False; continue
+            if lo <= sl_p:
+                pnl = (sl_p - entry_p) / entry_p * 100
+                trades.append({'pnl': pnl, 'win': False, 'type': zone_type})
+                in_pos = False; continue
+            if i - entry_i >= 32:
+                pnl = (cl - entry_p) / entry_p * 100
+                trades.append({'pnl': pnl, 'win': pnl > 0, 'type': zone_type})
+                in_pos = False
+            continue
+
+        # ── 신규 진입 조건 ────────────────────────────────
+        # 시간대 필터
+        if ts_kst_hour not in LIQUID_HOURS_KST:
+            continue
+
+        # 하루 거래 한도
+        date_key = ts.date()
+        if daily_counts.get(date_key, 0) >= MAX_DAILY_TRADES:
+            continue
+
+        for z in reversed(active):
+            zh, zl = z['zone_high'], z['zone_low']
+            if lo <= zh and cl >= zl:
+                entry = min(op, zh) if op <= zh else zh
+                sl_pct = (entry - zl) / entry if entry > 0 else 0
+                if not (MIN_SL_PCT <= sl_pct <= MAX_SL_PCT):
+                    continue
+
+                # ── 품질 점수 필터 ─────────────────────
+                q = _quality_score_bt(df, i, zl)
+                if q < MIN_QUALITY_SCORE:
+                    continue
+
+                entry_p = entry
+                sl_p    = entry - entry * sl_pct
+                tp_p    = entry + entry * sl_pct * RR_RATIO
+                entry_i = i
+                in_pos  = True
+                zone_type = z['type']
+                daily_counts[date_key] = daily_counts.get(date_key, 0) + 1
                 break
 
     return _calc_metrics(trades)
@@ -283,7 +438,7 @@ def run_all():
                     e21 = df4h['Close'].ewm(span=21, adjust=False).mean()
                     htf_trend = (e9 > e21).astype(int)
 
-            # FVG+OB
+            # FVG+OB (원본)
             m = _backtest_fvg_ob(df, htf_trend)
             all_rows.append({
                 'Ticker': code, 'Name': name, 'Market': market,
@@ -294,6 +449,21 @@ def run_all():
                 'MDD%': m['mdd'], 'Sharpe': m['sharpe'],
                 '_tr': m['total_pnl'],
             })
+
+            # FVG+OB★ (필터링: 품질4점↑ + 하루5건 + 고유동성시간)
+            # 1m+4h 모드는 데이터 기간이 짧아 제외
+            if tf_name != '1m+4h':
+                mf = _backtest_fvg_ob_filtered(df)
+                all_rows.append({
+                    'Ticker': code, 'Name': name, 'Market': market,
+                    'Timeframe': tf_name, 'Strategy': 'FVG+OB★',
+                    'Trades': mf['trades'], 'WinRate%': mf['win_rate'],
+                    'TotalRet%': mf['total_pnl'], 'AvgRet%': mf['avg_ret'],
+                    'ProfitFactor': mf['profit_factor'],
+                    'MDD%': mf['mdd'], 'Sharpe': mf['sharpe'],
+                    '_tr': mf['total_pnl'],
+                })
+                print(f"  ↳ FVG+OB★ 필터: {mf['trades']}건 WR={mf['win_rate']:.0f}% PnL={mf['total_pnl']:+.1f}%", end=' ')
 
             # 25전략
             if len(df) >= 60:
@@ -375,11 +545,32 @@ def run_all():
         print(f"    {r['Strategy']:<22} 평균수익={r['avg_ret']:+.2f}%  "
               f"WR={r['avg_wr']:.0f}%  Sharpe={r['avg_sh']:.2f}  종목={r['tickers']:.0f}개")
 
-    print(f"\n  [FVG+OB 타임프레임별 평균]")
-    fvg_rank = ranking[ranking['Strategy'] == 'FVG+OB']
+    print(f"\n  [FVG+OB 원본 — 타임프레임별 평균]")
+    fvg_rank = ranking[ranking['Strategy'] == 'FVG+OB'].sort_values('avg_ret', ascending=False)
     for _, r in fvg_rank.iterrows():
         print(f"    {r['Timeframe']:<8} 평균수익={r['avg_ret']:+.2f}%  "
-              f"WR={r['avg_wr']:.0f}%  Sharpe={r['avg_sh']:.2f}")
+              f"WR={r['avg_wr']:.0f}%  거래={r['tickers']:.0f}종목  Sharpe={r['avg_sh']:.2f}")
+
+    print(f"\n  [FVG+OB★ 필터링 — 타임프레임별 평균]")
+    print(f"  (품질 {MIN_QUALITY_SCORE}점↑ + 하루 {MAX_DAILY_TRADES}건 + 고유동성시간 9~11시/22~24시 KST)")
+    fvg_f = ranking[ranking['Strategy'] == 'FVG+OB★'].sort_values('avg_ret', ascending=False)
+    for _, r in fvg_f.iterrows():
+        print(f"    {r['Timeframe']:<8} 평균수익={r['avg_ret']:+.2f}%  "
+              f"WR={r['avg_wr']:.0f}%  거래={r['tickers']:.0f}종목  Sharpe={r['avg_sh']:.2f}")
+
+    # 코인만 따로
+    print(f"\n  [FVG+OB★ 코인 4종 평균 (ETH/SOL/XRP/BTC)]")
+    coin_f = df_all[
+        (df_all['Strategy'] == 'FVG+OB★') &
+        (df_all['Market'] == 'CRYPTO')
+    ].groupby('Timeframe').agg(
+        avg_ret=('TotalRet%', 'mean'),
+        avg_wr=('WinRate%', 'mean'),
+        avg_tr=('Trades', 'mean'),
+    ).reset_index().sort_values('avg_ret', ascending=False)
+    for _, r in coin_f.iterrows():
+        print(f"    {r['Timeframe']:<8} 평균수익={r['avg_ret']:+.2f}%  "
+              f"WR={r['avg_wr']:.0f}%  평균거래={r['avg_tr']:.0f}건")
     print(f"{'='*70}\n")
 
 

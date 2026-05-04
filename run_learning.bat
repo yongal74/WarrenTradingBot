@@ -1,5 +1,6 @@
 @echo off
 chcp 65001 > nul
+set PYTHONUTF8=1
 cd /d "%~dp0"
 echo [Warren] 복기+학습 에이전트 시작 %date% %time%
 echo   1. 25전략 시뮬레이션 (14일 롤링)

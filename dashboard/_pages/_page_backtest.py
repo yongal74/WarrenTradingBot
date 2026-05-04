@@ -40,7 +40,7 @@ def _empty_msg():
 
 
 def render():
-    st.markdown("### Backtest Results — 14종목 × 25전략 × 4타임프레임")
+    st.markdown("### Backtest Results — 14종목 × 25전략 × 4타임프레임 | FVG+OB★ 필터링 비교")
 
     df_all  = _load('all_results.csv')
     df_rank = _load('strategy_ranking.csv')
@@ -51,28 +51,36 @@ def render():
         return
 
     # ── 상단 KPI ─────────────────────────────────────────────────
-    total_sims = len(df_all)
-    best_row   = df_all.loc[df_all['TotalRet%'].idxmax()] if len(df_all) > 0 else None
-    fvg_df     = df_all[df_all['Strategy'] == 'FVG+OB']
-    fvg_avg_wr = fvg_df['WinRate%'].mean() if not fvg_df.empty else 0
-    fvg_avg_pnl= fvg_df['TotalRet%'].mean() if not fvg_df.empty else 0
+    total_sims  = len(df_all)
+    best_row    = df_all.loc[df_all['TotalRet%'].idxmax()] if len(df_all) > 0 else None
+    fvg_df      = df_all[df_all['Strategy'] == 'FVG+OB']
+    fvg_f_df    = df_all[df_all['Strategy'] == 'FVG+OB★']
+    fvg_avg_wr  = fvg_df['WinRate%'].mean() if not fvg_df.empty else 0
+    fvg_avg_pnl = fvg_df['TotalRet%'].mean() if not fvg_df.empty else 0
+    fvgf_avg_wr = fvg_f_df['WinRate%'].mean() if not fvg_f_df.empty else 0
+    fvgf_sharpe = fvg_f_df['Sharpe'].mean() if not fvg_f_df.empty else 0
 
-    k1, k2, k3, k4, k5 = st.columns(5)
+    # 코인 4H 필터★ 평균
+    coin4h_f = fvg_f_df[(fvg_f_df['Market'] == 'CRYPTO') & (fvg_f_df['Timeframe'] == '4h')]
+    coin4h_pnl = coin4h_f['TotalRet%'].mean() if not coin4h_f.empty else 0
+
+    k1, k2, k3, k4, k5, k6 = st.columns(6)
     k1.metric("총 시뮬레이션", f"{total_sims:,}건")
-    k2.metric("FVG+OB 평균 승률", f"{fvg_avg_wr:.1f}%")
-    k3.metric("FVG+OB 평균 수익", f"{fvg_avg_pnl:+.1f}%")
+    k2.metric("FVG+OB 원본 WR", f"{fvg_avg_wr:.1f}%")
+    k3.metric("FVG+OB★ 필터 WR", f"{fvgf_avg_wr:.1f}%",
+              f"+{fvgf_avg_wr - fvg_avg_wr:.1f}%p")
+    k4.metric("FVG+OB★ Sharpe", f"{fvgf_sharpe:.2f}")
+    k5.metric("코인 4H★ 평균수익", f"{coin4h_pnl:+.1f}%")
     if best_row is not None:
-        k4.metric("최고 전략",
-                  f"{best_row['Strategy']} / {best_row.get('Timeframe','')}")
-        k5.metric("최고 수익률",
-                  f"{best_row['TotalRet%']:+.1f}%",
-                  f"{best_row['Ticker']} {best_row.get('Market','')}")
+        k6.metric("전체 최고", f"{best_row['TotalRet%']:+.1f}%",
+                  f"{best_row['Ticker']} {best_row.get('Timeframe','')}")
 
     st.markdown("---")
 
     # ── 탭 구성 ──────────────────────────────────────────────────
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "FVG+OB 핵심 결과",
+        "★ 필터 효과 비교",
         "전략 랭킹",
         "타임프레임 비교",
         "종목별 TOP3",
@@ -149,6 +157,146 @@ def render():
 
     # ════════════════════════════════════════════════════════
     with tab2:
+        st.markdown("#### FVG+OB★ 필터링 효과 — 원본 vs 품질4점↑ + 하루5건 + 고유동성시간")
+
+        fvg_orig = df_all[df_all['Strategy'] == 'FVG+OB'].copy()
+        fvg_filt = df_all[df_all['Strategy'] == 'FVG+OB★'].copy()
+
+        if fvg_orig.empty or fvg_filt.empty:
+            st.info("FVG+OB★ 데이터 없음 — 백테스트를 재실행하세요")
+        else:
+            # 타임프레임별 WR / PnL / Sharpe 비교
+            tfs = ['15m', '5m', '4h']
+            orig_wr  = [fvg_orig[fvg_orig['Timeframe']==t]['WinRate%'].mean() for t in tfs]
+            filt_wr  = [fvg_filt[fvg_filt['Timeframe']==t]['WinRate%'].mean() for t in tfs]
+            orig_pnl = [fvg_orig[fvg_orig['Timeframe']==t]['TotalRet%'].mean() for t in tfs]
+            filt_pnl = [fvg_filt[fvg_filt['Timeframe']==t]['TotalRet%'].mean() for t in tfs]
+            orig_sh  = [fvg_orig[fvg_orig['Timeframe']==t]['Sharpe'].mean() for t in tfs]
+            filt_sh  = [fvg_filt[fvg_filt['Timeframe']==t]['Sharpe'].mean() for t in tfs]
+
+            c1, c2, c3 = st.columns(3)
+
+            with c1:
+                fig_wr = go.Figure()
+                fig_wr.add_trace(go.Bar(name='원본', x=tfs, y=orig_wr,
+                                        marker_color='#58a6ff', opacity=0.7))
+                fig_wr.add_trace(go.Bar(name='★필터', x=tfs, y=filt_wr,
+                                        marker_color='#26a69a'))
+                fig_wr.update_layout(
+                    title=dict(text='승률(%) 비교', font=dict(color='#d1d4dc', size=12)),
+                    height=280, barmode='group',
+                    paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='#1e222d',
+                    font=dict(color='#787b86', size=10),
+                    margin=dict(t=35, b=10, l=40, r=10),
+                    legend=dict(bgcolor='rgba(0,0,0,0)', font=dict(color='#8b949e', size=9)),
+                    xaxis=dict(color='#8b949e'),
+                    yaxis=dict(gridcolor='#2a2e39', color='#8b949e'),
+                )
+                st.plotly_chart(fig_wr, use_container_width=True, config={'displayModeBar': False})
+
+            with c2:
+                fig_pnl = go.Figure()
+                fig_pnl.add_trace(go.Bar(name='원본', x=tfs, y=orig_pnl,
+                                         marker_color='#58a6ff', opacity=0.7))
+                fig_pnl.add_trace(go.Bar(name='★필터', x=tfs, y=filt_pnl,
+                                         marker_color='#26a69a'))
+                fig_pnl.update_layout(
+                    title=dict(text='총수익(%) 비교', font=dict(color='#d1d4dc', size=12)),
+                    height=280, barmode='group',
+                    paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='#1e222d',
+                    font=dict(color='#787b86', size=10),
+                    margin=dict(t=35, b=10, l=40, r=10),
+                    legend=dict(bgcolor='rgba(0,0,0,0)', font=dict(color='#8b949e', size=9)),
+                    xaxis=dict(color='#8b949e'),
+                    yaxis=dict(gridcolor='#2a2e39', color='#8b949e'),
+                )
+                st.plotly_chart(fig_pnl, use_container_width=True, config={'displayModeBar': False})
+
+            with c3:
+                fig_sh = go.Figure()
+                fig_sh.add_trace(go.Bar(name='원본', x=tfs, y=orig_sh,
+                                        marker_color='#58a6ff', opacity=0.7))
+                fig_sh.add_trace(go.Bar(name='★필터', x=tfs, y=filt_sh,
+                                        marker_color='#e3b341'))
+                fig_sh.update_layout(
+                    title=dict(text='Sharpe 비교 (리스크 조정)', font=dict(color='#d1d4dc', size=12)),
+                    height=280, barmode='group',
+                    paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='#1e222d',
+                    font=dict(color='#787b86', size=10),
+                    margin=dict(t=35, b=10, l=40, r=10),
+                    legend=dict(bgcolor='rgba(0,0,0,0)', font=dict(color='#8b949e', size=9)),
+                    xaxis=dict(color='#8b949e'),
+                    yaxis=dict(gridcolor='#2a2e39', color='#8b949e'),
+                )
+                st.plotly_chart(fig_sh, use_container_width=True, config={'displayModeBar': False})
+
+            # 코인 4종 전용 섹션
+            st.markdown("---")
+            st.markdown("##### 코인 4종 (ETH/SOL/XRP/BTC) — FVG+OB★ 필터링 결과")
+            coin_f = fvg_filt[fvg_filt['Market'] == 'CRYPTO']
+            if not coin_f.empty:
+                cc1, cc2, cc3, cc4 = st.columns(4)
+                for col, tf in zip([cc1, cc2, cc3, cc4], ['4h', '15m', '5m', '1m+4h']):
+                    sub = coin_f[coin_f['Timeframe'] == tf]
+                    if not sub.empty:
+                        col.metric(f"{tf} 평균수익",
+                                   f"{sub['TotalRet%'].mean():+.1f}%",
+                                   f"WR {sub['WinRate%'].mean():.0f}%  Sharpe {sub['Sharpe'].mean():.2f}")
+                    else:
+                        col.metric(f"{tf}", "데이터없음")
+
+                # 종목별 4H 성과 바차트
+                coin_4h = coin_f[coin_f['Timeframe'] == '4h'].sort_values('TotalRet%', ascending=True)
+                if not coin_4h.empty:
+                    fig_c = go.Figure(go.Bar(
+                        y=coin_4h['Name'] if 'Name' in coin_4h.columns else coin_4h['Ticker'],
+                        x=coin_4h['TotalRet%'],
+                        orientation='h',
+                        marker_color='#e3b341',
+                        text=[f"WR:{wr:.0f}%  Q:{q:.0f}  Sharpe:{sh:.2f}"
+                              for wr, q, sh in zip(coin_4h['WinRate%'],
+                                                   coin_4h.get('quality_score', [0]*len(coin_4h)),
+                                                   coin_4h['Sharpe'])],
+                        textposition='outside',
+                        textfont=dict(size=10),
+                    ))
+                    fig_c.update_layout(
+                        title=dict(text='코인 4종 4H FVG+OB★ 총수익(%)', font=dict(color='#d1d4dc', size=13)),
+                        height=260,
+                        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='#1e222d',
+                        font=dict(color='#787b86', size=11),
+                        margin=dict(t=35, b=10, l=80, r=100),
+                        xaxis=dict(gridcolor='#2a2e39', color='#8b949e', zeroline=True,
+                                   zerolinecolor='#363a45'),
+                        yaxis=dict(color='#8b949e'),
+                    )
+                    st.plotly_chart(fig_c, use_container_width=True, config={'displayModeBar': False})
+
+            # 비교 요약 테이블
+            st.markdown("##### 필터링 효과 요약")
+            summary_rows = []
+            for tf in ['4h', '15m', '5m']:
+                o = fvg_orig[fvg_orig['Timeframe'] == tf]
+                f = fvg_filt[fvg_filt['Timeframe'] == tf]
+                if o.empty or f.empty:
+                    continue
+                summary_rows.append({
+                    '타임프레임':   tf,
+                    '원본_거래수':  int(o['Trades'].mean()),
+                    '필터_거래수':  int(f['Trades'].mean()),
+                    '거래감소%':   f"{(1 - f['Trades'].mean()/o['Trades'].mean())*100:.0f}%",
+                    '원본_WR':     f"{o['WinRate%'].mean():.1f}%",
+                    '필터_WR':     f"{f['WinRate%'].mean():.1f}%",
+                    'WR_개선':     f"+{f['WinRate%'].mean()-o['WinRate%'].mean():.1f}%p",
+                    '원본_Sharpe': f"{o['Sharpe'].mean():.2f}",
+                    '필터_Sharpe': f"{f['Sharpe'].mean():.2f}",
+                    'Sharpe_개선': f"+{f['Sharpe'].mean()-o['Sharpe'].mean():.2f}",
+                })
+            if summary_rows:
+                st.dataframe(pd.DataFrame(summary_rows), use_container_width=True, hide_index=True)
+
+    # ════════════════════════════════════════════════════════
+    with tab3:  # 전략 랭킹
         st.markdown("#### 전략 랭킹 — 평균 총수익 기준")
 
         if df_rank.empty:
@@ -212,7 +360,7 @@ def render():
                 st.plotly_chart(fig_sc, use_container_width=True, config={'displayModeBar': False})
 
     # ════════════════════════════════════════════════════════
-    with tab3:
+    with tab4:
         st.markdown("#### 타임프레임 비교 — FVG+OB")
 
         fvg2 = df_all[df_all['Strategy'] == 'FVG+OB'].copy()
@@ -256,7 +404,7 @@ def render():
             st.dataframe(tf_summary, use_container_width=True, hide_index=True)
 
     # ════════════════════════════════════════════════════════
-    with tab4:
+    with tab5:
         st.markdown("#### 종목별 TOP3 전략")
 
         if df_top3.empty:
@@ -300,7 +448,7 @@ def render():
                              use_container_width=True, hide_index=True)
 
     # ════════════════════════════════════════════════════════
-    with tab5:
+    with tab6:
         st.markdown("#### 전체 결과 데이터")
 
         col1, col2, col3 = st.columns(3)
@@ -333,6 +481,62 @@ def render():
         if not filtered.empty:
             csv = filtered.to_csv(index=False).encode('utf-8-sig')
             st.download_button("CSV 다운로드", csv, "backtest_filtered.csv", "text/csv")
+
+
+    # ── V4.0 다전략 백테스트 결과 탭 ──────────────────────────
+    with tab_v4:
+        st.markdown('#### V4.0 다전략 백테스트 — 6전략 × KR98+US20+CRYPTO10 (2026-04-29)')
+        st.info('BB반등(S5) 전략이 KR 78종목에서 평균 WR 64.1%, EV +1.958%로 압도적 1위')
+
+        st.markdown('**전략별 성과 비교**')
+        strategy_data = {
+            '전략': ['S5_BBReversal', 'S6_Momentum', 'S2_SuperTrend', 'S4_GapGo', 'S3_MACD', 'S1_VWAP'],
+            '채택종목수': [78, 57, 38, 41, 65, 60],
+            '평균WR%': [64.1, 60.8, 62.9, 60.3, 57.1, 55.0],
+            '평균EV%': [1.958, 2.204, 1.932, 1.405, 1.830, 1.345],
+            '평균PF': [3.47, 3.10, 3.40, 3.63, 2.15, 2.15],
+            '순위': [1, 2, 3, 4, 5, 6],
+        }
+        import pandas as pd
+        st.dataframe(pd.DataFrame(strategy_data), use_container_width=True, hide_index=True)
+
+        st.markdown('**V4.0 채택 종목 (시장별)**')
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.markdown('**KR — BB반등 1H**')
+            kr_data = {
+                '종목': ['SK텔레콤','코웨이','현대차','카카오','두산에너빌','하나금융','삼성중공업','한화시스템'],
+                'WR%': [85.7,78.6,77.8,81.8,66.7,73.3,75.0,60.0],
+                'EV%': [5.23,2.67,3.82,2.44,4.22,1.87,5.15,7.96],
+            }
+            st.dataframe(pd.DataFrame(kr_data), use_container_width=True, hide_index=True)
+        with col2:
+            st.markdown('**US — BB반등+Momentum 1H**')
+            us_data = {
+                '종목': ['AMD','마이크론','엔비디아','브로드컴','MSTR'],
+                'WR%': [87.5,80.0,72.7,66.7,60.0],
+                'EV%': [1.89,1.96,1.27,2.75,3.10],
+            }
+            st.dataframe(pd.DataFrame(us_data), use_container_width=True, hide_index=True)
+        with col3:
+            st.markdown('**CRYPTO — FVG+OB 4H (R:R 1:3)**')
+            cr_data = {
+                '종목': ['BTC','SOL','XRP','DOGE'],
+                'WR%': [31.5,28.5,26.9,28.8],
+                'EV%/trade': [0.187,0.209,0.137,0.193],
+                '월수익%': [1.41,1.81,1.21,1.71],
+            }
+            st.dataframe(pd.DataFrame(cr_data), use_container_width=True, hide_index=True)
+
+        st.markdown('**V5 통합 월수익 시뮬레이션 (시드 2,500만)**')
+        sim_data = {
+            '시장': ['KR (1,000만)', 'US (1,000만)', 'CRYPTO (500만)', '합계 (2,500만)'],
+            '채택종목': ['대덕전자·삼성물산', 'AMD', 'BTC·SOL·XRP·DOGE', '-'],
+            '월수익': ['+39만원', '+70만원', '+15만원', '+124만원'],
+            '월수익률': ['3.91%', '6.96%', '2.74%', '4.95%'],
+            'APY': ['46.9%', '83.5%', '32.9%', '59.4%'],
+        }
+        st.dataframe(pd.DataFrame(sim_data), use_container_width=True, hide_index=True)
 
     # ── 재실행 버튼 ─────────────────────────────────────────────
     st.markdown("---")

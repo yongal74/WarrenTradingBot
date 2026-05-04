@@ -72,16 +72,38 @@ def get_regime(use_cache: bool = True) -> tuple[str, dict]:
 
     for key, sym in tickers.items():
         try:
-            df = yf.download(sym, period='10d', interval='1d',
-                             auto_adjust=True, progress=False)
-            if hasattr(df.columns, 'levels'):
-                df.columns = df.columns.droplevel(1)
-            c = df['Close'].dropna()
-            raw[key] = float(c.iloc[-1]) if len(c) > 0 else None
-            if key == 'dxy' and len(c) >= 5:
-                dxy_5d_chg = (float(c.iloc[-1]) - float(c.iloc[-5])) / float(c.iloc[-5]) * 100
+            # v8 API 직접 호출 (yfinance 1.3.0 호환성 우회)
+            import urllib.request, json as _json
+            _url = (f'https://query1.finance.yahoo.com/v8/finance/chart/{sym}'
+                    f'?interval=1d&range=10d')
+            _req = urllib.request.Request(
+                _url, headers={'User-Agent': 'Mozilla/5.0'})
+            _resp = urllib.request.urlopen(_req, timeout=10)
+            _data = _json.loads(_resp.read())
+            _r = _data.get('chart', {}).get('result', [])
+            if _r:
+                _q = _r[0].get('indicators', {}).get('quote', [{}])[0]
+                _adj = _r[0].get('indicators', {}).get('adjclose', [])
+                _closes = (_adj[0].get('adjclose', []) if _adj
+                           else _q.get('close', []))
+                _closes = [x for x in _closes if x is not None]
+                raw[key] = float(_closes[-1]) if _closes else None
+                if key == 'dxy' and len(_closes) >= 5:
+                    dxy_5d_chg = (_closes[-1] - _closes[-5]) / _closes[-5] * 100
+            else:
+                raw[key] = None
         except Exception:
-            raw[key] = None
+            try:
+                df = yf.download(sym, period='10d', interval='1d',
+                                 auto_adjust=True, progress=False)
+                if hasattr(df.columns, 'levels'):
+                    df.columns = df.columns.droplevel(1)
+                c = df['Close'].dropna()
+                raw[key] = float(c.iloc[-1]) if len(c) > 0 else None
+                if key == 'dxy' and len(c) >= 5:
+                    dxy_5d_chg = (float(c.iloc[-1]) - float(c.iloc[-5])) / float(c.iloc[-5]) * 100
+            except Exception:
+                raw[key] = None
 
     vix   = raw.get('vix')
     dxy   = raw.get('dxy')
@@ -164,12 +186,14 @@ def regime_for_market(regime: str, market: str) -> str:
 
 def min_quality_by_regime(regime: str) -> int:
     """
-    국면별 최소 진입 품질 점수 (0=필터 없음)
-    AGGRESSIVE / NORMAL : FVG+OB 단독 (0점 → 필터 없음)
-    DEFENSIVE           : 7점 중 3점 이상
+    국면별 최소 진입 품질 점수
+    AGGRESSIVE / NORMAL : 4점 이상
+    DEFENSIVE           : 5점 이상
     HALT                : 거래 불가 (호출 자체 차단됨)
     """
-    return 3 if regime == 'DEFENSIVE' else 0
+    if regime == 'DEFENSIVE':
+        return 5
+    return 4  # NORMAL / AGGRESSIVE 모두 4점 이상
 
 
 if __name__ == '__main__':
